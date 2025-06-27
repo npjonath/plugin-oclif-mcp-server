@@ -1,12 +1,12 @@
 {
-  "name": "plugin-mcp-server",
+  "name": "oclif-plugin-mcp-server",
   "description": "A plugin for the oclif CLI framework that automatically discovers commands and serves them through the Model Context Protocol (MCP).",
   "version": "0.1.0",
   "author": "Jonathan Jot",
   "bin": {
-    "plugin-mcp-server": "./bin/run.js"
+    "oclif-plugin-mcp-server": "./bin/run.js"
   },
-  "bugs": "https://github.com/oclif-plugin/plugin-mcp-server/issues",
+  "bugs": "https://github.com/npjonath/oclif-plugin-mcp-server/issues",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.2",
     "@oclif/core": "^4",
@@ -47,7 +47,7 @@
     "./dist",
     "./oclif.manifest.json"
   ],
-  "homepage": "https://github.com/oclif-plugin/plugin-mcp-server",
+  "homepage": "https://github.com/npjonath/oclif-plugin-mcp-server",
   "keywords": [
     "oclif"
   ],
@@ -55,8 +55,8 @@
   "main": "dist/index.js",
   "type": "module",
   "oclif": {
-    "bin": "plugin-mcp-server",
-    "dirname": "plugin-mcp-server",
+    "bin": "oclif-plugin-mcp-server",
+    "dirname": "oclif-plugin-mcp-server",
     "commands": "./dist/commands",
     "plugins": [
       "@oclif/plugin-help",
@@ -69,7 +69,7 @@
       }
     }
   },
-  "repository": "oclif-plugin/plugin-mcp-server",
+  "repository": "npjonath/oclif-plugin-mcp-server",
   "scripts": {
     "build": "shx rm -rf dist && tsc -b",
     "clean": "shx rm -f oclif.manifest.json",
