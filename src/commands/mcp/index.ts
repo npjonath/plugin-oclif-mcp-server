@@ -28,11 +28,11 @@ export default class Mcp extends Command {
       version: this.config.version,
     })
 
-    // Autodiscover all commands that are not hidden, have allowMCP flag and are not the MCP command itself
+    // Autodiscover all commands that are not hidden, that are not disableMCP flag and are not the MCP command itself
     const commandPromises: Promise<void>[] = []
 
     for (const cmdClass of this.config.commands as Command.Loadable[]) {
-      if (cmdClass.hidden || !cmdClass.allowMCP || cmdClass.id === 'mcp') continue
+      if (cmdClass.hidden || cmdClass.disableMCP || cmdClass.id === 'mcp') continue
 
       // Register command as tool and resources in parallel
       commandPromises.push(this.registerCommandAsTool(cmdClass), this.registerResource(cmdClass))

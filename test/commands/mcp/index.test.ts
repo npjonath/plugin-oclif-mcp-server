@@ -15,7 +15,6 @@ const mockServer = {
 // Simple mock commands to test with
 const testCommands = [
   {
-    allowMCP: true,
     args: {arg1: {name: 'arg1', required: true}},
     description: 'Test command description',
     flags: {
@@ -27,7 +26,7 @@ const testCommands = [
     summary: 'Test command summary',
   },
   {
-    allowMCP: true,
+    disableMCP: false,
     id: 'test:resources',
     mcpResources: [
       {
@@ -39,12 +38,11 @@ const testCommands = [
     ],
   },
   {
-    allowMCP: true,
     hidden: true,
     id: 'hidden:command',
   },
   {
-    allowMCP: false,
+    disableMCP: true,
     id: 'no:mcp',
   },
   {
@@ -307,7 +305,7 @@ describe('MCP Command', () => {
       expect(logStub.calledWith('🔌 MCP server for "test-cli" ready')).to.be.true
     })
 
-    it('should process commands with allowMCP flag', async () => {
+    it('should process commands with disableMCP = false flag', async () => {
       // This test verifies that the command processes the mock commands correctly
       // The actual registration is tested in individual method tests
       try {
