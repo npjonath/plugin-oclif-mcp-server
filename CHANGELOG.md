@@ -1,3 +1,10 @@
+## [0.2.2](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.2.1...0.2.2) (2025-06-27)
+
+### Bug Fixes
+
+- lint-staged ([9570605](https://github.com/npjonath/oclif-plugin-mcp-server/commit/9570605bbb23d2379c31558bdfa89dc9f7b18b3f))
+- remove postinstall script, add manifest generation to prepare script ([fe894db](https://github.com/npjonath/oclif-plugin-mcp-server/commit/fe894db8319c8779343cb323ab7aa9ee951324b7))
+
 ## [0.2.1](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.2.0...0.2.1) (2025-06-27)
 
 ### Bug Fixes
