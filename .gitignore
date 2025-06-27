@@ -1,0 +1,14 @@
+*-debug.log
+*-error.log
+**/.DS_Store
+/.idea
+/dist
+/tmp
+/node_modules
+oclif.manifest.json
+npm-shrinkwrap.json
+/.nyc_output
+/coverage
+
+package-lock.json
+pnpm-lock.yaml
