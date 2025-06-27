@@ -1,3 +1,9 @@
+## [0.2.4](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.2.3...0.2.4) (2025-06-27)
+
+### Bug Fixes
+
+- test, disableMCP behavior ([99bca69](https://github.com/npjonath/oclif-plugin-mcp-server/commit/99bca695099a6e453d00dde54429b0b0e9e009ef))
+
 ## [0.2.3](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.2.2...0.2.3) (2025-06-27)
 
 ### Bug Fixes
