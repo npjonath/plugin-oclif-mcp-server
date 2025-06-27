@@ -18,20 +18,6 @@ The **Model Context Protocol (MCP)** is an open standard that enables AI assista
 - 🚀 **Execute** commands with proper error handling
 - 📊 **Access** resources and documentation
 
-<!-- toc -->
-
-- [🔌 oclif-plugin-mcp-server](#-oclif-plugin-mcp-server)
-- [Install the plugin](#install-the-plugin)
-- [Start the MCP server](#start-the-mcp-server)
-- [Set custom log level for npm operations](#set-custom-log-level-for-npm-operations)
-- [Set custom npm registry](#set-custom-npm-registry)
-- [Your existing CLI](#your-existing-cli)
-- [After MCP integration, AI can use these naturally:](#after-mcp-integration-ai-can-use-these-naturally)
-- ["Deploy my-app to production with force flag"](#deploy-my-app-to-production-with-force-flag)
-- ["Show me the current status in JSON format"](#show-me-the-current-status-in-json-format)
-- ["Get the last 100 log entries"](#get-the-last-100-log-entries)
-<!-- tocstop -->
-
 ## 🚀 Features
 
 - **🔍 Auto-discovery**: Automatically discovers and exposes oclif commands as MCP tools
