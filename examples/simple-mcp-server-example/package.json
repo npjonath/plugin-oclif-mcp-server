@@ -6,7 +6,7 @@
   "bin": {
     "simple-mcp-server-example": "./bin/run.js"
   },
-  "bugs": "https://github.com/npjonath/plugin-oclif-mcp-server/issues",
+  "bugs": "https://github.com/npjonath/oclif-plugin-mcp-server/issues",
   "dependencies": {
     "@oclif/core": "^4",
     "@oclif/plugin-help": "^6",
@@ -37,7 +37,7 @@
     "./dist",
     "./oclif.manifest.json"
   ],
-  "homepage": "https://github.com/npjonath/plugin-oclif-mcp-server",
+  "homepage": "https://github.com/npjonath/oclif-plugin-mcp-server",
   "keywords": [
     "oclif"
   ],
@@ -59,7 +59,7 @@
       }
     }
   },
-  "repository": "npjonath/plugin-oclif-mcp-server",
+  "repository": "npjonath/oclif-plugin-mcp-server",
   "scripts": {
     "build": "shx rm -rf dist && tsc -b",
     "lint": "eslint",

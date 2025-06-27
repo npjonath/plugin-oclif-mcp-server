@@ -1,20 +1,21 @@
-simple-mcp-server-example
-=================
+# simple-mcp-server-example
 
 A simple cli with basic command that use the mcp server plugin for oclif
-
 
 [![oclif](https://img.shields.io/badge/cli-oclif-brightgreen.svg)](https://oclif.io)
 [![Version](https://img.shields.io/npm/v/simple-mcp-server-example.svg)](https://npmjs.org/package/simple-mcp-server-example)
 [![Downloads/week](https://img.shields.io/npm/dw/simple-mcp-server-example.svg)](https://npmjs.org/package/simple-mcp-server-example)
 
-
 <!-- toc -->
-* [Usage](#usage)
-* [Commands](#commands)
+
+- [Usage](#usage)
+- [Commands](#commands)
 <!-- tocstop -->
+
 # Usage
+
 <!-- usage -->
+
 ```sh-session
 $ npm install -g simple-mcp-server-example
 $ simple-mcp-server-example COMMAND
@@ -26,22 +27,26 @@ USAGE
   $ simple-mcp-server-example COMMAND
 ...
 ```
+
 <!-- usagestop -->
+
 # Commands
+
 <!-- commands -->
-* [`simple-mcp-server-example hello PERSON`](#simple-mcp-server-example-hello-person)
-* [`simple-mcp-server-example hello world`](#simple-mcp-server-example-hello-world)
-* [`simple-mcp-server-example help [COMMAND]`](#simple-mcp-server-example-help-command)
-* [`simple-mcp-server-example plugins`](#simple-mcp-server-example-plugins)
-* [`simple-mcp-server-example plugins add PLUGIN`](#simple-mcp-server-example-plugins-add-plugin)
-* [`simple-mcp-server-example plugins:inspect PLUGIN...`](#simple-mcp-server-example-pluginsinspect-plugin)
-* [`simple-mcp-server-example plugins install PLUGIN`](#simple-mcp-server-example-plugins-install-plugin)
-* [`simple-mcp-server-example plugins link PATH`](#simple-mcp-server-example-plugins-link-path)
-* [`simple-mcp-server-example plugins remove [PLUGIN]`](#simple-mcp-server-example-plugins-remove-plugin)
-* [`simple-mcp-server-example plugins reset`](#simple-mcp-server-example-plugins-reset)
-* [`simple-mcp-server-example plugins uninstall [PLUGIN]`](#simple-mcp-server-example-plugins-uninstall-plugin)
-* [`simple-mcp-server-example plugins unlink [PLUGIN]`](#simple-mcp-server-example-plugins-unlink-plugin)
-* [`simple-mcp-server-example plugins update`](#simple-mcp-server-example-plugins-update)
+
+- [`simple-mcp-server-example hello PERSON`](#simple-mcp-server-example-hello-person)
+- [`simple-mcp-server-example hello world`](#simple-mcp-server-example-hello-world)
+- [`simple-mcp-server-example help [COMMAND]`](#simple-mcp-server-example-help-command)
+- [`simple-mcp-server-example plugins`](#simple-mcp-server-example-plugins)
+- [`simple-mcp-server-example plugins add PLUGIN`](#simple-mcp-server-example-plugins-add-plugin)
+- [`simple-mcp-server-example plugins:inspect PLUGIN...`](#simple-mcp-server-example-pluginsinspect-plugin)
+- [`simple-mcp-server-example plugins install PLUGIN`](#simple-mcp-server-example-plugins-install-plugin)
+- [`simple-mcp-server-example plugins link PATH`](#simple-mcp-server-example-plugins-link-path)
+- [`simple-mcp-server-example plugins remove [PLUGIN]`](#simple-mcp-server-example-plugins-remove-plugin)
+- [`simple-mcp-server-example plugins reset`](#simple-mcp-server-example-plugins-reset)
+- [`simple-mcp-server-example plugins uninstall [PLUGIN]`](#simple-mcp-server-example-plugins-uninstall-plugin)
+- [`simple-mcp-server-example plugins unlink [PLUGIN]`](#simple-mcp-server-example-plugins-unlink-plugin)
+- [`simple-mcp-server-example plugins update`](#simple-mcp-server-example-plugins-update)
 
 ## `simple-mcp-server-example hello PERSON`
 
@@ -65,7 +70,7 @@ EXAMPLES
   hello friend from oclif! (./src/commands/hello/index.ts)
 ```
 
-_See code: [src/commands/hello/index.ts](https://github.com/npjonath/plugin-oclif-mcp-server/blob/v0.0.0/src/commands/hello/index.ts)_
+_See code: [src/commands/hello/index.ts](https://github.com/npjonath/oclif-plugin-mcp-server/blob/v0.0.0/src/commands/hello/index.ts)_
 
 ## `simple-mcp-server-example hello world`
 
@@ -83,7 +88,7 @@ EXAMPLES
   hello world! (./src/commands/hello/world.ts)
 ```
 
-_See code: [src/commands/hello/world.ts](https://github.com/npjonath/plugin-oclif-mcp-server/blob/v0.0.0/src/commands/hello/world.ts)_
+_See code: [src/commands/hello/world.ts](https://github.com/npjonath/oclif-plugin-mcp-server/blob/v0.0.0/src/commands/hello/world.ts)_
 
 ## `simple-mcp-server-example help [COMMAND]`
 
@@ -394,4 +399,5 @@ DESCRIPTION
 ```
 
 _See code: [@oclif/plugin-plugins](https://github.com/oclif/plugin-plugins/blob/v5.4.42/src/commands/plugins/update.ts)_
+
 <!-- commandsstop -->

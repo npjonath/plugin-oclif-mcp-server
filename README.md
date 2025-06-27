@@ -3,9 +3,9 @@
 > Transform any oclif CLI into an MCP (Model Context Protocol) server for seamless AI assistant integration
 
 [![oclif](https://img.shields.io/badge/cli-oclif-brightgreen.svg)](https://oclif.io)
-[![Version](https://img.shields.io/npm/v/plugin-mcp-server.svg)](https://npmjs.org/package/plugin-mcp-server)
-[![Downloads/week](https://img.shields.io/npm/dw/plugin-mcp-server.svg)](https://npmjs.org/package/plugin-mcp-server)
-[![License](https://img.shields.io/npm/l/plugin-mcp-server.svg)](https://github.com/oclif-plugin/plugin-mcp-server/blob/main/LICENSE)
+[![Version](https://img.shields.io/npm/v/plugin-mcp-server.svg)](https://npmjs.org/package/oclif-plugin-mcp-server)
+[![Downloads/week](https://img.shields.io/npm/dw/plugin-mcp-server.svg)](https://npmjs.org/package/oclif-plugin-mcp-server)
+[![License](https://img.shields.io/npm/l/plugin-mcp-server.svg)](https://github.com/npjonath/oclif-plugin-mcp-server/blob/main/LICENSE)
 
 This plugin automatically converts your oclif CLI commands into an MCP server, allowing AI assistants like Claude, ChatGPT, and Cursor to discover and execute your CLI tools naturally through conversation.
 
@@ -19,16 +19,17 @@ The **Model Context Protocol (MCP)** is an open standard that enables AI assista
 - 📊 **Access** resources and documentation
 
 <!-- toc -->
-* [🔌 oclif-plugin-mcp-server](#-oclif-plugin-mcp-server)
-* [Install the plugin](#install-the-plugin)
-* [Start the MCP server](#start-the-mcp-server)
-* [Set custom log level for npm operations](#set-custom-log-level-for-npm-operations)
-* [Set custom npm registry](#set-custom-npm-registry)
-* [Your existing CLI](#your-existing-cli)
-* [After MCP integration, AI can use these naturally:](#after-mcp-integration-ai-can-use-these-naturally)
-* ["Deploy my-app to production with force flag"](#deploy-my-app-to-production-with-force-flag)
-* ["Show me the current status in JSON format"](#show-me-the-current-status-in-json-format)
-* ["Get the last 100 log entries"](#get-the-last-100-log-entries)
+
+- [🔌 oclif-plugin-mcp-server](#-oclif-plugin-mcp-server)
+- [Install the plugin](#install-the-plugin)
+- [Start the MCP server](#start-the-mcp-server)
+- [Set custom log level for npm operations](#set-custom-log-level-for-npm-operations)
+- [Set custom npm registry](#set-custom-npm-registry)
+- [Your existing CLI](#your-existing-cli)
+- [After MCP integration, AI can use these naturally:](#after-mcp-integration-ai-can-use-these-naturally)
+- ["Deploy my-app to production with force flag"](#deploy-my-app-to-production-with-force-flag)
+- ["Show me the current status in JSON format"](#show-me-the-current-status-in-json-format)
+- ["Get the last 100 log entries"](#get-the-last-100-log-entries)
 <!-- tocstop -->
 
 ## 🚀 Features
