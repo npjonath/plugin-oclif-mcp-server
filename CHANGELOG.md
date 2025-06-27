@@ -1,3 +1,9 @@
+## [0.2.3](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.2.2...0.2.3) (2025-06-27)
+
+### Bug Fixes
+
+- make husky optional in prepare script for GitHub installations ([1185f40](https://github.com/npjonath/oclif-plugin-mcp-server/commit/1185f4084dad94bfebbee4636675b4f228b1b455))
+
 ## [0.2.2](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.2.1...0.2.2) (2025-06-27)
 
 ### Bug Fixes
