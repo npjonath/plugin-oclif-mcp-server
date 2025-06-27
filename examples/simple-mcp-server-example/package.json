@@ -1,42 +1,32 @@
 {
-  "name": "plugin-mcp-server",
-  "description": "A plugin for the oclif CLI framework that automatically discovers commands and serves them through the Model Context Protocol (MCP).",
-  "version": "0.0.1",
-  "author": "Jonathan Jot",
+  "name": "simple-mcp-server-example",
+  "description": "A simple cli with basic command that use the mcp server plugin for oclif",
+  "version": "0.0.0",
+  "author": "NPjonath",
   "bin": {
-    "plugin-mcp-server": "./bin/run.js"
+    "simple-mcp-server-example": "./bin/run.js"
   },
-  "bugs": "https://github.com/oclif-plugin/plugin-mcp-server/issues",
+  "bugs": "https://github.com/npjonath/plugin-oclif-mcp-server/issues",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.13.2",
     "@oclif/core": "^4",
     "@oclif/plugin-help": "^6",
-    "@oclif/plugin-plugins": "^5",
-    "zod": "^3.25.67"
+    "@oclif/plugin-plugins": "^5"
   },
   "devDependencies": {
-    "@commitlint/config-conventional": "^19",
     "@eslint/compat": "^1",
     "@oclif/prettier-config": "^0.2.1",
     "@oclif/test": "^4",
     "@types/chai": "^4",
     "@types/mocha": "^10",
     "@types/node": "^18",
-    "@types/sinon": "^17.0.4",
     "chai": "^4",
-    "commitlint": "^19",
-    "husky": "^9.1.7",
-    "lint-staged": "^15",
     "eslint": "^9",
     "eslint-config-oclif": "^6",
     "eslint-config-prettier": "^10",
     "mocha": "^10",
-    "nyc": "^15.1.0",
     "oclif": "^4",
-    "prettier": "^3.5.3",
     "shx": "^0.3.3",
     "ts-node": "^10",
-    "sinon": "^21.0.0",
     "typescript": "^5"
   },
   "engines": {
@@ -47,7 +37,7 @@
     "./dist",
     "./oclif.manifest.json"
   ],
-  "homepage": "https://github.com/oclif-plugin/plugin-mcp-server",
+  "homepage": "https://github.com/npjonath/plugin-oclif-mcp-server",
   "keywords": [
     "oclif"
   ],
@@ -55,8 +45,8 @@
   "main": "dist/index.js",
   "type": "module",
   "oclif": {
-    "bin": "plugin-mcp-server",
-    "dirname": "plugin-mcp-server",
+    "bin": "simple-mcp-server-example",
+    "dirname": "simple-mcp-server-example",
     "commands": "./dist/commands",
     "plugins": [
       "@oclif/plugin-help",
@@ -69,14 +59,12 @@
       }
     }
   },
-  "repository": "oclif-plugin/plugin-mcp-server",
+  "repository": "npjonath/plugin-oclif-mcp-server",
   "scripts": {
     "build": "shx rm -rf dist && tsc -b",
-    "clean": "shx rm -f oclif.manifest.json",
-    "compile": "tsc",
     "lint": "eslint",
     "postpack": "shx rm -f oclif.manifest.json",
-    "posttest": "npm run lint",
+    "posttest": "yarn lint",
     "prepack": "oclif manifest && oclif readme",
     "test": "mocha --forbid-only \"test/**/*.test.ts\"",
     "version": "oclif readme && git add README.md"
