@@ -1,4 +1,4 @@
-import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js'
+import {McpServer, ResourceTemplate} from '@modelcontextprotocol/sdk/server/mcp.js'
 import {StdioServerTransport} from '@modelcontextprotocol/sdk/server/stdio.js'
 import {Command, Interfaces} from '@oclif/core'
 import {z, ZodTypeAny} from 'zod'
@@ -20,6 +20,8 @@ export default class Mcp extends Command {
   static override description = 'Start MCP (Model Context Protocol) server for AI assistant integration'
   static override examples = ['$ sm mcp']
   static override hidden = false
+
+  private allResources: McpResource[] = []
   private server!: McpServer
 
   async run(): Promise<void> {
@@ -34,12 +36,15 @@ export default class Mcp extends Command {
     for (const cmdClass of this.config.commands as Command.Loadable[]) {
       if (cmdClass.hidden || cmdClass.disableMCP || cmdClass.id === 'mcp') continue
 
-      // Register command as tool and resources in parallel
-      commandPromises.push(this.registerCommandAsTool(cmdClass), this.registerResource(cmdClass))
+      // Register command as tool and collect resources in parallel
+      commandPromises.push(this.registerCommandAsTool(cmdClass), this.collectResourcesFromCommand(cmdClass))
     }
 
-    // Wait for all commands to be registered
+    // Wait for all commands to be processed
     await Promise.all(commandPromises)
+
+    // Register all collected resources with the MCP server
+    await this.registerAllResources()
 
     await this.server.connect(new StdioServerTransport())
     this.log(`🔌 MCP server for "${this.config.name}" ready`)
@@ -102,6 +107,115 @@ export default class Mcp extends Command {
   }
 
   /**
+   * Collect resources from a command class without registering them yet
+   * This allows us to gather all resources first, then register them properly
+   */
+  private async collectResourcesFromCommand(cmdClass: Command.Loadable): Promise<void> {
+    // Load the command class if needed
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let CommandClass: any = cmdClass
+    if (typeof cmdClass.load === 'function') {
+      CommandClass = await cmdClass.load()
+    }
+
+    // Collect static resources defined on the class
+    if (CommandClass.mcpResources) {
+      const resources = Array.isArray(CommandClass.mcpResources)
+        ? CommandClass.mcpResources
+        : [CommandClass.mcpResources]
+
+      for (const resource of resources) {
+        this.allResources.push({
+          ...resource,
+          commandClass: CommandClass,
+        })
+      }
+    }
+
+    // Collect dynamic resource provider method
+    if (CommandClass.prototype?.getMcpResources || CommandClass.getMcpResources) {
+      try {
+        const instance = new CommandClass([], this.config)
+        const dynamicResources = CommandClass.getMcpResources
+          ? await CommandClass.getMcpResources()
+          : await instance.getMcpResources()
+
+        const resources = Array.isArray(dynamicResources) ? dynamicResources : [dynamicResources]
+
+        for (const resource of resources) {
+          this.allResources.push({
+            ...resource,
+            commandClass: CommandClass,
+            commandInstance: instance,
+          })
+        }
+      } catch (error) {
+        this.warn(`Failed to load dynamic resources for ${cmdClass.id}: ${error}`)
+      }
+    }
+  }
+
+  /**
+   * Get the content for a resource by executing its handler or returning static content
+   */
+  private async getResourceContent(
+    resource: McpResource & {
+      commandClass?: Command.Loadable
+      commandInstance?: Command
+    },
+    params?: Record<string, string>,
+  ): Promise<string> {
+    try {
+      // If resource has a handler method, use it
+      if (resource.handler) {
+        if (typeof resource.handler === 'function') {
+          return await resource.handler()
+        }
+
+        if (typeof resource.handler === 'string') {
+          // Try to call method on instance or class
+          const target = resource.commandInstance || resource.commandClass
+          const targetWithMethods = target as Record<string, unknown>
+          const method = targetWithMethods[resource.handler]
+
+          if (method && typeof method === 'function') {
+            return await (method as () => Promise<string>)()
+          }
+
+          throw new TypeError(`Handler method '${resource.handler}' not found`)
+        }
+
+        throw new TypeError('Invalid handler type')
+      }
+
+      if (resource.content) {
+        // If resource has static content, return it
+        return resource.content
+      }
+
+      // Default fallback
+      return `Resource: ${resource.name}\nURI: ${resource.uri}${params ? `\nParameters: ${JSON.stringify(params, null, 2)}` : ''}`
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+
+      throw new Error(`Failed to load resource ${resource.name}: ${errorMessage}`)
+    }
+  }
+
+  /**
+   * Register all collected resources with the MCP server using proper MCP protocol
+   */
+  private async registerAllResources(): Promise<void> {
+    const resourcePromises: Promise<void>[] = []
+
+    for (const resource of this.allResources) {
+      resourcePromises.push(this.registerMcpCompliantResource(resource))
+    }
+
+    await Promise.all(resourcePromises)
+  }
+
+  /**
    * Register a command as an MCP tool
    */
   private async registerCommandAsTool(cmdClass: Command.Loadable): Promise<void> {
@@ -152,147 +266,72 @@ export default class Mcp extends Command {
   }
 
   /**
-   * Register resources from a command class
-   * Supports both static and dynamic resources
+   * Register a single resource using MCP-compliant approach
    */
-  private async registerResource(cmdClass: Command.Loadable): Promise<void> {
-    // Load the command class if needed
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let CommandClass: any = cmdClass
-    if (typeof cmdClass.load === 'function') {
-      CommandClass = await cmdClass.load()
-    }
-
-    const resourcePromises: Promise<void>[] = []
-
-    // Check for static resources defined on the class
-    if (CommandClass.mcpResources) {
-      const resources = Array.isArray(CommandClass.mcpResources)
-        ? CommandClass.mcpResources
-        : [CommandClass.mcpResources]
-
-      for (const resource of resources) {
-        resourcePromises.push(this.registerSingleResource(resource, CommandClass))
-      }
-    }
-
-    // Check for dynamic resource provider method
-    if (CommandClass.prototype?.getMcpResources || CommandClass.getMcpResources) {
-      try {
-        const instance = new CommandClass([], this.config)
-        const dynamicResources = CommandClass.getMcpResources
-          ? await CommandClass.getMcpResources()
-          : await instance.getMcpResources()
-
-        const resources = Array.isArray(dynamicResources) ? dynamicResources : [dynamicResources]
-
-        for (const resource of resources) {
-          resourcePromises.push(this.registerSingleResource(resource, CommandClass, instance))
-        }
-      } catch (error) {
-        this.warn(`Failed to load dynamic resources for ${cmdClass.id}: ${error}`)
-      }
-    }
-
-    // Wait for all resources to be registered
-    await Promise.all(resourcePromises)
-  }
-
-  /**
-   * Register a single resource with the MCP server
-   * 
-   * Examples : 
-    // Static resources on command class
-    static mcpResources = [
-      {
-        uri: "config://app",
-        name: "App Config", 
-        description: "Application configuration",
-        content: "Static content here"
-      },
-      {
-        uri: "dynamic://data/{id}",
-        name: "Dynamic Data",
-        handler: "getDynamicData" // method name on class/instance
-      }
-    ]
-   
-    // Dynamic resources via method
-    static async getMcpResources() {
-      return [
-        {
-          uri: "runtime://status",
-          name: "Runtime Status",
-          handler: () => getRuntimeStatus()
-        }
-      ]
-    }
-   */
-  private async registerSingleResource(
-    resource: McpResource,
-    CommandClass: Command.Loadable,
-    instance?: Command,
+  private async registerMcpCompliantResource(
+    resource: McpResource & {
+      commandClass?: Command.Loadable
+      commandInstance?: Command
+    },
   ): Promise<void> {
     if (!resource.uri || !resource.name) {
       this.warn('Resource missing required uri or name property')
       return
     }
 
-    const resourceHandler = async () => {
-      try {
-        let content: string
+    // Check if this is a dynamic resource (has parameters in URI)
+    const isDynamic = resource.uri.includes('{') && resource.uri.includes('}')
 
-        // If resource has a handler method, use it
-        if (resource.handler) {
-          if (typeof resource.handler === 'function') {
-            content = await resource.handler()
-          } else if (typeof resource.handler === 'string') {
-            // Try to call method on instance or class
-            const target = instance || CommandClass
-            const targetWithMethods = target as Record<string, unknown>
-            const method = targetWithMethods[resource.handler]
-            if (method && typeof method === 'function') {
-              content = await (method as () => Promise<string>)()
-            } else {
-              throw new TypeError(`Handler method '${resource.handler}' not found`)
-            }
-          } else {
-            throw new TypeError('Invalid handler type')
+    if (isDynamic) {
+      // Register dynamic resource using ResourceTemplate
+      const template = new ResourceTemplate(resource.uri, {list: undefined})
+
+      this.server.registerResource(
+        resource.name,
+        template,
+        {
+          description: resource.description || `Resource: ${resource.name}`,
+          mimeType: resource.mimeType || 'text/plain',
+          title: resource.name,
+        },
+        async (uri: any, extra: any) => {
+          // Extract parameters from the ResourceTemplate extra
+          const params = extra?.templateArguments || {}
+          const content = await this.getResourceContent(resource, params)
+          return {
+            contents: [
+              {
+                mimeType: resource.mimeType || 'text/plain',
+                text: content,
+                uri: uri.href,
+              },
+            ],
           }
-        } else if (resource.content) {
-          // If resource has static content, return it
-          content = resource.content
-        } else {
-          // Default fallback
-          content = `Resource: ${resource.name}\nURI: ${resource.uri}`
-        }
-
-        // Return MCP-compliant format
-        return {
-          contents: [
-            {
-              mimeType: resource.mimeType || 'text/plain',
-              text: content,
-              uri: resource.uri,
-            },
-          ],
-        }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        throw new Error(`Failed to load resource ${resource.name}: ${errorMessage}`)
-      }
+        },
+      )
+    } else {
+      // Register static resource
+      this.server.registerResource(
+        resource.name,
+        resource.uri,
+        {
+          description: resource.description || `Resource: ${resource.name}`,
+          mimeType: resource.mimeType || 'text/plain',
+          title: resource.name,
+        },
+        async (uri: any) => {
+          const content = await this.getResourceContent(resource)
+          return {
+            contents: [
+              {
+                mimeType: resource.mimeType || 'text/plain',
+                text: content,
+                uri: uri.href,
+              },
+            ],
+          }
+        },
+      )
     }
-
-    // Register resource with the MCP server using the correct signature
-    this.server.registerResource(
-      resource.name,
-      resource.uri,
-      {
-        description: resource.description || `Resource: ${resource.name}`,
-        mimeType: resource.mimeType || 'text/plain',
-        name: resource.name,
-      },
-      resourceHandler,
-    )
   }
 }
