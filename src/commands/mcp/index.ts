@@ -20,7 +20,6 @@ export default class Mcp extends Command {
   static override description = 'Start MCP (Model Context Protocol) server for AI assistant integration'
   static override examples = ['$ sm mcp']
   static override hidden = false
-
   private allResources: McpResource[] = []
   private server!: McpServer
 
@@ -294,6 +293,7 @@ export default class Mcp extends Command {
           mimeType: resource.mimeType || 'text/plain',
           title: resource.name,
         },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         async (uri: any, extra: any) => {
           // Extract parameters from the ResourceTemplate extra
           const params = extra?.templateArguments || {}
@@ -319,6 +319,7 @@ export default class Mcp extends Command {
           mimeType: resource.mimeType || 'text/plain',
           title: resource.name,
         },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         async (uri: any) => {
           const content = await this.getResourceContent(resource)
           return {

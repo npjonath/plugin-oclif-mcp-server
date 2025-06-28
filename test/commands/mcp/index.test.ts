@@ -1,4 +1,4 @@
-import {Command, Config} from '@oclif/core'
+import {Config} from '@oclif/core'
 import {expect} from 'chai'
 import sinon from 'sinon'
 import {z} from 'zod'
@@ -49,6 +49,11 @@ const testCommands = [
     id: 'mcp', // Should be filtered out
   },
 ]
+
+interface ExtendedMcpResource extends McpResource {
+  commandClass?: unknown
+  commandInstance?: unknown
+}
 
 describe('MCP Command', () => {
   let mcpCommand: McpCommand
@@ -150,7 +155,86 @@ describe('MCP Command', () => {
     })
   })
 
-  describe('registerSingleResource', () => {
+  describe('getResourceContent', () => {
+    it('should return static content when provided', async () => {
+      const resource: ExtendedMcpResource = {
+        content: 'Static content',
+        description: 'Test resource',
+        name: 'Test Resource',
+        uri: 'test://resource',
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (mcpCommand as any).getResourceContent(resource)
+
+      expect(result).to.equal('Static content')
+    })
+
+    it('should call function handler when provided', async () => {
+      const resource: ExtendedMcpResource = {
+        handler: () => 'Function result',
+        name: 'Function Resource',
+        uri: 'func://resource',
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (mcpCommand as any).getResourceContent(resource)
+
+      expect(result).to.equal('Function result')
+    })
+
+    it('should call method handler when provided as string', async () => {
+      const mockCommand = {
+        testMethod: () => 'Method result',
+      }
+
+      const resource: ExtendedMcpResource = {
+        commandInstance: mockCommand,
+        handler: 'testMethod',
+        name: 'Method Resource',
+        uri: 'method://resource',
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (mcpCommand as any).getResourceContent(resource)
+
+      expect(result).to.equal('Method result')
+    })
+
+    it('should provide fallback content when no content or handler', async () => {
+      const resource: ExtendedMcpResource = {
+        name: 'Empty Resource',
+        uri: 'empty://resource',
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (mcpCommand as any).getResourceContent(resource)
+
+      expect(result).to.include('Resource: Empty Resource')
+      expect(result).to.include('URI: empty://resource')
+    })
+
+    it('should handle handler errors gracefully', async () => {
+      const resource: ExtendedMcpResource = {
+        handler() {
+          throw new Error('Handler error')
+        },
+        name: 'Error Resource',
+        uri: 'error://resource',
+      }
+
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (mcpCommand as any).getResourceContent(resource)
+        expect.fail('Should have thrown an error')
+      } catch (error) {
+        expect(error).to.be.an('error')
+        expect((error as Error).message).to.include('Failed to load resource Error Resource')
+      }
+    })
+  })
+
+  describe('registerMcpCompliantResource', () => {
     beforeEach(() => {
       // Mock the server property
       Object.defineProperty(mcpCommand, 'server', {
@@ -159,8 +243,8 @@ describe('MCP Command', () => {
       })
     })
 
-    it('should register resource with static content', async () => {
-      const resource: McpResource = {
+    it('should register static resource correctly', async () => {
+      const resource: ExtendedMcpResource = {
         content: 'Static content',
         description: 'Test resource',
         name: 'Test Resource',
@@ -168,7 +252,7 @@ describe('MCP Command', () => {
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (mcpCommand as any).registerSingleResource(resource, Command)
+      await (mcpCommand as any).registerMcpCompliantResource(resource)
 
       expect(mockServer.registerResource.calledOnce).to.be.true
 
@@ -176,84 +260,50 @@ describe('MCP Command', () => {
       expect(name).to.equal('Test Resource')
       expect(uri).to.equal('test://resource')
       expect(config.description).to.equal('Test resource')
+      expect(config.title).to.equal('Test Resource')
       expect(handler).to.be.a('function')
 
       // Test handler returns MCP-compliant format
-      const result = await handler()
+      const result = await handler({href: 'test://resource'})
       expect(result).to.have.property('contents')
       expect(result.contents).to.be.an('array')
       expect(result.contents[0]).to.have.property('text', 'Static content')
       expect(result.contents[0]).to.have.property('uri', 'test://resource')
+      expect(result.contents[0]).to.have.property('mimeType', 'text/plain')
     })
 
-    it('should register resource with function handler', async () => {
-      const resource: McpResource = {
-        handler: () => 'Function result',
-        name: 'Function Resource',
-        uri: 'func://resource',
+    it('should register dynamic resource with ResourceTemplate', async () => {
+      const resource: ExtendedMcpResource = {
+        handler: () => 'Dynamic content',
+        name: 'Dynamic Resource',
+        uri: 'dynamic://{id}/resource',
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (mcpCommand as any).registerSingleResource(resource, Command)
+      await (mcpCommand as any).registerMcpCompliantResource(resource)
 
-      const handler = mockServer.registerResource.firstCall.args[3]
-      const result = await handler()
-      expect(result).to.have.property('contents')
-      expect(result.contents[0]).to.have.property('text', 'Function result')
+      expect(mockServer.registerResource.calledOnce).to.be.true
+
+      const [name, template, config, handler] = mockServer.registerResource.firstCall.args
+      expect(name).to.equal('Dynamic Resource')
+      expect(template).to.be.an('object') // ResourceTemplate
+      expect(config.title).to.equal('Dynamic Resource')
+      expect(handler).to.be.a('function')
     })
 
-    it('should handle missing uri or name', async () => {
+    it('should handle missing uri or name gracefully', async () => {
       const invalidResource = {
         description: 'Invalid resource',
-      } as McpResource
+      } as ExtendedMcpResource
 
       const warnStub = sinon.stub(mcpCommand, 'warn')
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (mcpCommand as any).registerSingleResource(invalidResource, Command)
+      await (mcpCommand as any).registerMcpCompliantResource(invalidResource)
 
       expect(warnStub.calledOnce).to.be.true
       expect(warnStub.firstCall.args[0]).to.include('missing required uri or name')
       expect(mockServer.registerResource.called).to.be.false
-    })
-
-    it('should provide fallback content when no content or handler', async () => {
-      const resource: McpResource = {
-        name: 'Empty Resource',
-        uri: 'empty://resource',
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (mcpCommand as any).registerSingleResource(resource, Command)
-
-      const handler = mockServer.registerResource.firstCall.args[3]
-      const result = await handler()
-      expect(result).to.have.property('contents')
-      expect(result.contents[0].text).to.include('Resource: Empty Resource')
-      expect(result.contents[0].text).to.include('URI: empty://resource')
-    })
-
-    it('should handle handler errors gracefully', async () => {
-      const resource: McpResource = {
-        handler() {
-          throw new Error('Handler error')
-        },
-        name: 'Error Resource',
-        uri: 'error://resource',
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (mcpCommand as any).registerSingleResource(resource, Command)
-
-      const handler = mockServer.registerResource.firstCall.args[3]
-
-      try {
-        await handler()
-        expect.fail('Should have thrown an error')
-      } catch (error) {
-        expect(error).to.be.an('error')
-        expect((error as Error).message).to.include('Failed to load resource Error Resource')
-      }
     })
   })
 
