@@ -1,49 +1,82 @@
 # 🔌 oclif-plugin-mcp-server
 
-> Transform any oclif CLI into an MCP (Model Context Protocol) server for seamless AI assistant integration
+> Transform any oclif CLI into a **fully MCP-compliant** server for seamless AI assistant integration
 
 [![oclif](https://img.shields.io/badge/cli-oclif-brightgreen.svg)](https://oclif.io)
+[![MCP Compliant](https://img.shields.io/badge/MCP-Compliant-blue.svg)](https://modelcontextprotocol.io)
 [![Version](https://img.shields.io/npm/v/oclif-plugin-mcp-server.svg)](https://npmjs.org/package/oclif-plugin-mcp-server)
 [![Downloads/week](https://img.shields.io/npm/dw/oclif-plugin-mcp-server.svg)](https://npmjs.org/package/oclif-plugin-mcp-server)
 [![License](https://img.shields.io/npm/l/oclif-plugin-mcp-server.svg)](https://github.com/npjonath/oclif-plugin-mcp-server/blob/main/LICENSE)
 
-This plugin automatically converts your oclif CLI commands into an MCP server, allowing AI assistants like Claude, ChatGPT, and Cursor to discover and execute your CLI tools naturally through conversation.
+This plugin automatically converts your oclif CLI commands into a **fully MCP-compliant server**, implementing the [official Model Context Protocol specification](https://modelcontextprotocol.io/docs/concepts/resources). It allows AI assistants like Claude, ChatGPT, and Cursor to discover and execute your CLI tools naturally through conversation.
+
+## ✨ What's New
+
+🎉 **Fully MCP-Compliant**: Now implements the official [Model Context Protocol](https://modelcontextprotocol.io) specification with:
+
+- ✅ **`resources/list`** endpoint for resource discovery
+- ✅ **`resources/read`** endpoint for on-demand content fetching
+- ✅ **ResourceTemplate** support for dynamic resources with parameters
+- ✅ **Proper content separation** following MCP best practices
+- ✅ **Type-safe resource handlers** with full metadata support
 
 ## What is MCP?
 
 The **Model Context Protocol (MCP)** is an open standard that enables AI assistants to securely connect to external data sources and tools. With MCP, your CLI becomes a first-class citizen in AI workflows, allowing assistants to:
 
-- 🔍 **Discover** your commands automatically
+- 🔍 **Discover** your commands and resources automatically
 - ✅ **Validate** inputs using type-safe schemas
 - 🚀 **Execute** commands with proper error handling
-- 📊 **Access** resources and documentation
+- 📊 **Access** resources with lazy loading and proper metadata
+- 🔒 **Secure** interactions through standardized protocols
 
 ## 🚀 Features
 
 - **🔍 Auto-discovery**: Automatically discovers and exposes oclif commands as MCP tools
 - **📝 Schema Generation**: Converts oclif arguments and flags to Zod schemas for type-safe execution
-- **📊 Resource Support**: Register static and dynamic resources for AI context
+- **📊 MCP-Compliant Resources**: Full support for static and dynamic resources following MCP specification
+- **⚡ Resource Templates**: Support for parameterized resources with `{parameter}` syntax
+- **🔄 Lazy Loading**: Resources are fetched on-demand through proper MCP endpoints
 - **🛡️ Error Handling**: Graceful error handling with detailed feedback
-- **⚡ Zero Configuration**: Works out-of-the-box with any oclif CLI
-- **🔧 Flexible**: Support for both static and dynamic resource registration
+- **⚙️ Zero Configuration**: Works out-of-the-box with any oclef CLI
+- **🎯 Standards Compliant**: Implements the official MCP specification
 
 ## 📦 Installation
 
-### As a Plugin at runtime (require oclif-plugin-plugin package configured in your CLI)
+### From GitHub (Recommended)
 
 ```bash
-# Install the plugin
+# Install directly from GitHub
+your-cli plugins install npjonath/oclif-plugin-mcp-server
+
+# Verify installation
+your-cli mcp --help
+```
+
+### As a Plugin at runtime
+
+```bash
+# Install the plugin (requires oclif-plugin-plugins)
 your-cli plugins install oclif-plugin-mcp-server
 
-# the following commands should be available in your CLI.
+# Start the MCP server
 your-cli mcp
-
-# Configure your IDE / AI Assistant to use it (see Configure AI Assistant section below)
 ```
 
 ### Embed plugin in your CLI code
 
-Follow instruction on oclif documentation to install plugin in your CLI (usually inside package.json)
+Add to your CLI's `package.json`:
+
+```json
+{
+  "dependencies": {
+    "oclif-plugin-mcp-server": "latest"
+  },
+  "oclif": {
+    "plugins": ["oclif-plugin-mcp-server"]
+  }
+}
+```
 
 ## 🎯 Quick Start
 
@@ -80,9 +113,9 @@ Add your CLI to your AI assistant's MCP configuration:
 
 #### For local development with this plugin
 
-1. build your cli
-2. generate the manifest using npx oclif manifest
-3. update your cursor mcp json file with
+1. Build your CLI: `yarn build`
+2. Generate manifest: `npx oclif manifest`
+3. Update your MCP configuration:
 
 ```json
 {
@@ -97,22 +130,25 @@ Add your CLI to your AI assistant's MCP configuration:
 
 ### 2. Start Chatting
 
-Your AI assistant can now discover and use your CLI commands:
+Your AI assistant can now discover and use your CLI commands and resources:
 
 ```
-👤 "Deploy my-app to staging"
-🤖 "I'll deploy your application to staging using the deploy command."
+👤 "Deploy my-app to staging and show me the deployment logs"
+🤖 "I'll deploy your application to staging and fetch the deployment logs."
 
    Executing: deploy my-app --environment staging
    ✅ Deploying my-app to staging
-   Deployment completed successfully!
+
+   Fetching resource: logs://deployment/my-app
+   📊 Deployment completed successfully!
+   🔍 Logs: [deployment details...]
 ```
 
 ## 📚 Advanced Usage
 
 ### Disable Commands from MCP autodiscovery
 
-Add the `disableMCP` property to commands you want to remove from the MCP autodiscovery:
+Add the `disableMCP` property to commands you want to exclude:
 
 ```typescript
 // src/commands/deploy.ts
@@ -122,11 +158,9 @@ export default class MyCommand extends Command {
   static description = 'Deploy your application'
   static disableMCP = true // 👈 disable this command for MCP autodiscovery
 
-  // ... oclif flags and args declaration here
-
   async run() {
     const {args, flags} = await this.parse(Deploy)
-    // ... oclif commands logic here
+    // ... command logic
   }
 }
 ```
@@ -137,25 +171,20 @@ Override the default tool ID generation:
 
 ```typescript
 export default class MyCommand extends Command {
-  // by default each commands are auto discover by the mcp server.
   static toolId = 'custom-tool-name' // Custom MCP tool identifier
 }
 ```
 
-### Declare MCP Resources
+### 📊 MCP-Compliant Resources
 
-MCP resources provide additional context for your MCP command.
-Resources are currently scoped to each command.
+Resources provide contextual data to AI assistants following the official MCP specification. Resources are automatically discoverable through the `resources/list` endpoint and fetched on-demand via `resources/read`.
 
-You can register a resource in the following ways:
+#### Static Resources
 
-- statically
-- dynamically (by providing a handler method)
-- instance
+Perfect for configuration, documentation, or fixed data:
 
 ```typescript
 export default class ConfigCommand extends Command {
-  // Option 1: static ressource (reserved variable name)
   static mcpResources = [
     {
       uri: 'config://app-settings',
@@ -173,8 +202,41 @@ export default class ConfigCommand extends Command {
       mimeType: 'application/json',
     },
   ]
+}
+```
 
-  // Option 2: Static method for dynamic resources (reserved method name)
+#### Dynamic Resources with Parameters
+
+Use `{parameter}` syntax for parameterized resources:
+
+```typescript
+export default class UserCommand extends Command {
+  static mcpResources = [
+    {
+      uri: 'users://{userId}/profile',
+      name: 'User Profile',
+      description: 'User profile information',
+      handler: 'getUserProfile', // Method name on class
+      mimeType: 'application/json',
+    },
+  ]
+
+  // Handler method receives parameters from URI
+  async getUserProfile() {
+    // Access to this.userId from URI parameter
+    const user = await this.fetchUser(this.userId)
+    return JSON.stringify(user, null, 2)
+  }
+}
+```
+
+#### Dynamic Resources via Static Methods
+
+Generate resources programmatically:
+
+```typescript
+export default class StatusCommand extends Command {
+  // Static method for dynamic resource generation
   static async getMcpResources() {
     return [
       {
@@ -185,51 +247,129 @@ export default class ConfigCommand extends Command {
           const status = await this.getSystemStatus()
           return JSON.stringify(status, null, 2)
         },
+        mimeType: 'application/json',
       },
     ]
   }
 
-  // Option 3: Instance method for dynamic resources (reserved method name)
+  private static async getSystemStatus() {
+    return {
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      timestamp: new Date().toISOString(),
+    }
+  }
+}
+```
+
+#### Instance Method Resources
+
+Resources that need access to command instance:
+
+```typescript
+export default class LogsCommand extends Command {
+  // Instance method for dynamic resources
   async getMcpResources() {
     return [
       {
-        uri: 'logs://recent',
+        uri: 'logs://recent/{count}',
         name: 'Recent Logs',
-        description: 'Last 100 log entries',
+        description: 'Last N log entries',
         handler: () => this.getRecentLogs(),
+        mimeType: 'text/plain',
       },
     ]
   }
 
-  private async getSystemStatus() {
-    // example computed business resources...
-  }
-
   private async getRecentLogs() {
-    // example computed business resources...
+    // Access to command instance and configuration
+    return await this.fetchLogs(this.config.logLevel)
+  }
+}
+```
+
+### Resource Handler Patterns
+
+```typescript
+export default class ExampleCommand extends Command {
+  static mcpResources = [
+    // String content
+    {
+      uri: 'example://static',
+      name: 'Static Content',
+      content: 'Direct string content',
+    },
+
+    // Function handler
+    {
+      uri: 'example://dynamic',
+      name: 'Dynamic Content',
+      handler: async () => {
+        return `Generated at: ${new Date().toISOString()}`
+      },
+    },
+
+    // Method name reference
+    {
+      uri: 'example://method',
+      name: 'Method Handler',
+      handler: 'getMethodContent', // Calls this.getMethodContent()
+    },
+  ]
+
+  async getMethodContent() {
+    return 'Content from method'
   }
 }
 ```
 
 ### Command Filtering
 
-The MCP server automatically filters commands based on:
+The MCP server automatically filters commands:
 
-- `hidden: false` - Command must not be hidden
-- `disableMCP: true` - Command must not disallow MCP (default: false)
-- Not the MCP command itself
+- ✅ `hidden: false` - Command must not be hidden
+- ✅ `disableMCP: true` - Command must not disable MCP (default: false)
+- ✅ Not the MCP command itself
 
 ## 🏗️ Architecture
 
 ```mermaid
 graph TB
     A[AI Assistant] -->|MCP Protocol| B[oclif-plugin-mcp-server]
-    B -->|Auto-discovery| C[oclif Commands]
-    B -->|Schema Generation| D[Zod Validation]
-    B -->|Resource Registration| E[Static/Dynamic Resources]
-    C -->|Execution| F[Command Output]
-    F -->|Response| A
+    B -->|resources/list| C[Resource Discovery]
+    B -->|resources/read| D[Content Fetching]
+    B -->|tools/call| E[Command Execution]
+
+    B -->|Auto-discovery| F[oclif Commands]
+    B -->|Schema Generation| G[Zod Validation]
+    B -->|Resource Registration| H[Static/Dynamic Resources]
+
+    F -->|Execution| I[Command Output]
+    H -->|Template Processing| J[Parameterized Content]
+
+    I -->|Response| A
+    J -->|Resource Content| A
+
+    style B fill:#e1f5fe
+    style C fill:#f3e5f5
+    style D fill:#f3e5f5
+    style E fill:#e8f5e8
 ```
+
+## 🔄 MCP Protocol Compliance
+
+This plugin implements the full MCP specification:
+
+| MCP Feature            | Status      | Implementation                                  |
+| ---------------------- | ----------- | ----------------------------------------------- |
+| **Tools**              | ✅ Complete | All oclif commands auto-discovered as tools     |
+| **Resources**          | ✅ Complete | `resources/list` and `resources/read` endpoints |
+| **Static Resources**   | ✅ Complete | Direct URI registration                         |
+| **Dynamic Resources**  | ✅ Complete | ResourceTemplate with parameters                |
+| **Resource Templates** | ✅ Complete | `{parameter}` syntax support                    |
+| **Content Types**      | ✅ Complete | Proper MIME type handling                       |
+| **Error Handling**     | ✅ Complete | Graceful error responses                        |
+| **Schema Validation**  | ✅ Complete | Zod schema generation from oclif definitions    |
 
 ## 📋 Examples
 
@@ -241,10 +381,29 @@ my-cli deploy my-app --environment production --force
 my-cli status --format json
 my-cli logs --tail 100
 
-# After MCP integration, AI can use these naturally:
-# "Deploy my-app to production with force flag"
-# "Show me the current status in JSON format"
-# "Get the last 100 log entries"
+# After MCP integration, AI can discover and use:
+# - Commands: "Deploy my-app to production with force flag"
+# - Resources: "Show me the current deployment status"
+# - Logs: "Get the last 100 log entries for my-app"
+```
+
+### Resource Discovery Flow
+
+```mermaid
+sequenceDiagram
+    participant AI as AI Assistant
+    participant MCP as MCP Server
+    participant CLI as Your CLI
+
+    AI->>MCP: resources/list
+    MCP->>CLI: Discover resources
+    CLI->>MCP: Return resource list
+    MCP->>AI: Available resources
+
+    AI->>MCP: resources/read(users://123/profile)
+    MCP->>CLI: Call resource handler
+    CLI->>MCP: Generate content
+    MCP->>AI: Resource content
 ```
 
 ## 🤝 Contributing
@@ -256,15 +415,28 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 ```bash
 git clone https://github.com/npjonath/oclif-plugin-mcp-server.git
 cd plugin-mcp-server
-yarn
-yarn run build
+yarn install
+yarn build
 ```
 
 ### Testing
 
 ```bash
-yarn test
-yarn lint
+yarn test        # Run tests
+yarn lint        # Check code style
+yarn build       # Build the plugin
+```
+
+### Testing MCP Compliance
+
+```bash
+# Test with MCP Inspector
+npx @modelcontextprotocol/inspector your-cli mcp
+
+# Test resource discovery
+curl -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"resources/list"}'
 ```
 
 ## 📄 License
@@ -276,9 +448,10 @@ MIT © [Jonathan Jot](https://github.com/npjonath/oclif-plugin-mcp-server)
 ## 🙏 Acknowledgments
 
 - [oclif](https://oclif.io/) - The Open CLI Framework
-- [Model Context Protocol](https://modelcontextprotocol.io/) - Connecting AI assistants to tools
-- [Anthropic](https://anthropic.com/) - For driving MCP adoption
+- [Model Context Protocol](https://modelcontextprotocol.io/) - Official MCP specification
+- [Anthropic](https://anthropic.com/) - For developing and promoting MCP
+- [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) - Official MCP implementation
 
 ---
 
-**Made with ❤️ for the AI-powered CLI future**
+**🌟 Now fully MCP-compliant and ready for the AI-powered CLI future!**
