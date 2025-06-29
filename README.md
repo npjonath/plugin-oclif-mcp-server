@@ -165,6 +165,45 @@ export default class MyCommand extends Command {
 }
 ```
 
+### Tool Annotations
+
+Add MCP-compliant tool annotations to provide AI assistants with metadata about your command's behavior:
+
+```typescript
+import {Command} from '@oclif/core'
+
+export default class DeployCommand extends Command {
+  static description = 'Deploy your application to production'
+
+  // Specify tool behavior annotations following MCP specification
+  static mcpAnnotations = {
+    readOnlyHint: false, // This command modifies the environment
+    destructiveHint: true, // This operation may be destructive
+    idempotentHint: false, // Multiple calls may have different effects
+    openWorldHint: true, // Interacts with external systems (deployment)
+  }
+
+  async run() {
+    // ... deployment logic
+  }
+}
+
+export default class StatusCommand extends Command {
+  static description = 'Get application status'
+
+  static mcpAnnotations = {
+    readOnlyHint: true, // This command only reads data
+    destructiveHint: false, // Safe operation
+    idempotentHint: true, // Multiple calls return same result
+    openWorldHint: true, // May check external systems
+  }
+
+  async run() {
+    // ... status check logic
+  }
+}
+```
+
 ### 📊 MCP-Compliant Resources
 
 Resources provide contextual data to AI assistants following the official MCP specification. Resources are automatically discoverable through the `resources/list` endpoint and fetched on-demand via `resources/read`.
@@ -353,6 +392,7 @@ This plugin implements the full MCP specification:
 | MCP Feature            | Status      | Implementation                                  |
 | ---------------------- | ----------- | ----------------------------------------------- |
 | **Tools**              | ✅ Complete | All oclif commands auto-discovered as tools     |
+| **Tool Annotations**   | ✅ Complete | Support for readOnlyHint, destructiveHint, etc. |
 | **Resources**          | ✅ Complete | `resources/list` and `resources/read` endpoints |
 | **Static Resources**   | ✅ Complete | Direct URI registration                         |
 | **Dynamic Resources**  | ✅ Complete | ResourceTemplate with parameters                |

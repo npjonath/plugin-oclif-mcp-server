@@ -16,6 +16,14 @@ export interface CommandInput {
   [key: string]: unknown
 }
 
+// Add MCP tool annotations interface
+export interface McpToolAnnotations {
+  destructiveHint?: boolean
+  idempotentHint?: boolean
+  openWorldHint?: boolean
+  readOnlyHint?: boolean
+}
+
 export default class Mcp extends Command {
   static override description = 'Start MCP (Model Context Protocol) server for AI assistant integration'
   static override examples = ['$ sm mcp']
@@ -226,7 +234,14 @@ export default class Mcp extends Command {
     const description = cmdClass.description ?? title
     const inputSchema = this.buildInputSchema(cmdClass)
 
-    this.server.registerTool(toolId, {description, inputSchema, title}, async (input) => {
+    // Build tool annotations following MCP specification
+    const annotations = {
+      title,
+      // Add support for custom annotations from command class
+      ...(cmdClass as Command.Loadable & {mcpAnnotations?: McpToolAnnotations}).mcpAnnotations,
+    }
+
+    this.server.registerTool(toolId, {annotations, description, inputSchema}, async (input) => {
       const argv = this.buildArgv(input, cmdClass)
 
       let out = ''
