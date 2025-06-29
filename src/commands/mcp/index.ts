@@ -46,7 +46,8 @@ export default class Mcp extends Command {
     await this.registerAllResources()
 
     await this.server.connect(new StdioServerTransport())
-    this.log(`🔌 MCP server for "${this.config.name}" ready`)
+    // Log to stderr to avoid interfering with MCP JSON-RPC protocol on stdout
+    console.error(`🔌 MCP server for "${this.config.name}" ready`)
   }
 
   // Converts MCP input back to argv for the oclif command
@@ -149,7 +150,7 @@ export default class Mcp extends Command {
           })
         }
       } catch (error) {
-        this.warn(`Failed to load dynamic resources for ${cmdClass.id}: ${error}`)
+        console.error(`Failed to load dynamic resources for ${cmdClass.id}: ${error}`)
       }
     }
   }
@@ -274,7 +275,7 @@ export default class Mcp extends Command {
     },
   ): Promise<void> {
     if (!resource.uri || !resource.name) {
-      this.warn('Resource missing required uri or name property')
+      console.error('Resource missing required uri or name property')
       return
     }
 
