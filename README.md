@@ -46,21 +46,11 @@ The **Model Context Protocol (MCP)** is an open standard that enables AI assista
 ### From GitHub (Recommended)
 
 ```bash
-# Install directly from GitHub
+# Install directly from GitHub (requires oclif-plugin-plugins)
 your-cli plugins install npjonath/oclif-plugin-mcp-server
 
 # Verify installation
 your-cli mcp --help
-```
-
-### As a Plugin at runtime
-
-```bash
-# Install the plugin (requires oclif-plugin-plugins)
-your-cli plugins install oclif-plugin-mcp-server
-
-# Start the MCP server
-your-cli mcp
 ```
 
 ### Embed plugin in your CLI code
