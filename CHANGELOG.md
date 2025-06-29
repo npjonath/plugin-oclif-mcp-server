@@ -1,3 +1,11 @@
+# [0.5.0](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.4.0...0.5.0) (2025-06-29)
+
+### Features
+
+- enhance MCP resource management with dynamic templates and subscriptions ([4c5c3d4](https://github.com/npjonath/oclif-plugin-mcp-server/commit/4c5c3d4b83bdffea468239c62d6f81091a573c48))
+- enhance MCP server with improved error handling and prompt validation ([eaf459b](https://github.com/npjonath/oclif-plugin-mcp-server/commit/eaf459be181e8b4e73a73cd7301f6633e8a9a719))
+- enhance MCP server with prompt and root support ([7d2120d](https://github.com/npjonath/oclif-plugin-mcp-server/commit/7d2120d439ef6a48e77ab6e6a7dc2b488782f0c2))
+
 # [0.4.0](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.3.1...0.4.0) (2025-06-29)
 
 ### Features
