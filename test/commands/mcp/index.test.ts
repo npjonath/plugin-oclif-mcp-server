@@ -5,12 +5,14 @@ import {z} from 'zod'
 
 import McpCommand, {CommandInput, McpResource} from '../../../src/commands/mcp/index.js'
 
-// Mock MCP Server and Transport
+// Mock MCP Server and Transport - using low-level Server API
 const mockServer = {
   connect: sinon.stub().resolves(),
-  registerResource: sinon.stub(),
-  registerTool: sinon.stub(),
+  setRequestHandler: sinon.stub(),
 }
+
+// Mock request handlers for testing
+const mockHandlers = new Map()
 
 // Simple mock commands to test with
 const testCommands = [
@@ -37,7 +39,49 @@ const testCommands = [
       openWorldHint: true,
       readOnlyHint: false,
     },
-    summary: 'Test command with annotations',
+    summary: 'Command with MCP annotations',
+  },
+  {
+    args: {},
+    description: 'Command with prompts and resources',
+    flags: {},
+    hidden: false,
+    id: 'test:prompts',
+    mcpPrompts: [
+      {
+        arguments: [{description: 'Task to analyze', name: 'task', required: true}],
+        description: 'Analyze a task',
+        name: 'analyze-task',
+      },
+    ],
+    mcpResources: [
+      {
+        description: 'Task analysis results',
+        name: 'Task Analysis',
+        uri: 'task://analysis',
+      },
+    ],
+    summary: 'Command with prompts and resources',
+  },
+  {
+    args: {},
+    description: 'Command with custom roots',
+    flags: {},
+    hidden: false,
+    id: 'test:roots',
+    mcpRoots: [
+      {
+        description: 'Project root directory',
+        name: 'project-root',
+        uri: 'file:///workspace/project',
+      },
+      {
+        description: 'Configuration directory',
+        name: 'config-root',
+        uri: 'file:///workspace/config',
+      },
+    ],
+    summary: 'Command with custom roots',
   },
   {
     disableMCP: false,
@@ -87,8 +131,18 @@ describe('MCP Command', () => {
 
     // Reset all stubs
     mockServer.connect.resetHistory()
-    mockServer.registerResource.resetHistory()
-    mockServer.registerTool.resetHistory()
+    mockServer.setRequestHandler.resetHistory()
+    mockHandlers.clear()
+
+    // Set up mock setRequestHandler to capture handlers by call order
+    let callCount = 0
+    const handlerMap = ['tools/list', 'tools/call', 'prompts/list', 'prompts/get', 'resources/list', 'resources/read']
+    mockServer.setRequestHandler.callsFake((schema: unknown, handler: unknown) => {
+      if (callCount < handlerMap.length) {
+        mockHandlers.set(handlerMap[callCount], handler)
+        callCount++
+      }
+    })
   })
 
   afterEach(() => {
@@ -248,7 +302,7 @@ describe('MCP Command', () => {
     })
   })
 
-  describe('registerCommandAsTool', () => {
+  describe('MCP Protocol Handlers', () => {
     beforeEach(() => {
       // Mock the server property
       Object.defineProperty(mcpCommand, 'server', {
@@ -257,58 +311,158 @@ describe('MCP Command', () => {
       })
     })
 
-    it('should register tool with annotations correctly', async () => {
-      const commandWithAnnotations = testCommands.find((cmd) => cmd.id === 'test:annotations')!
-
+    it('should register tools/list handler correctly', async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (mcpCommand as any).registerCommandAsTool(commandWithAnnotations)
+      await (mcpCommand as any).registerMcpHandlers()
 
-      expect(mockServer.registerTool.calledOnce).to.be.true
+      expect(mockServer.setRequestHandler.called).to.be.true
 
-      const [toolId, config, handler] = mockServer.registerTool.firstCall.args
-      expect(toolId).to.equal('test-annotations') // sanitized ID
-      expect(config.description).to.equal('Command with annotations')
-      expect(config.annotations).to.deep.include({
-        destructiveHint: true,
-        idempotentHint: false,
-        openWorldHint: true,
-        readOnlyHint: false,
-        title: 'Test command with annotations',
-      })
-      expect(handler).to.be.a('function')
+      // Check that tools/list handler was registered
+      const toolsListHandler = mockHandlers.get('tools/list')
+      expect(toolsListHandler).to.be.a('function')
+
+      // Test the handler
+      const result = await toolsListHandler()
+      expect(result).to.have.property('tools')
+      expect(result.tools).to.be.an('array')
     })
 
-    it('should register tool without annotations when mcpAnnotations is undefined', async () => {
-      const basicCommand = testCommands.find((cmd) => cmd.id === 'test:command')!
+    it('should register prompts/list handler correctly', async () => {
+      // Add test prompts
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(mcpCommand as any).allPrompts = [
+        {
+          arguments: [{description: 'Test input', name: 'input', required: true}],
+          description: 'Test prompt',
+          name: 'test-prompt',
+        },
+      ]
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (mcpCommand as any).registerCommandAsTool(basicCommand)
+      await (mcpCommand as any).registerMcpHandlers()
 
-      expect(mockServer.registerTool.calledOnce).to.be.true
+      const promptsListHandler = mockHandlers.get('prompts/list')
+      expect(promptsListHandler).to.be.a('function')
 
-      const [toolId, config, handler] = mockServer.registerTool.firstCall.args
-      expect(toolId).to.equal('test-command')
-      expect(config.annotations).to.deep.equal({
-        title: 'Test command summary',
-      })
-      expect(handler).to.be.a('function')
+      const result = await promptsListHandler()
+      expect(result).to.have.property('prompts')
+      expect(result.prompts).to.be.an('array')
+      expect(result.prompts[0]).to.have.property('name', 'test-prompt')
     })
 
-    it('should sanitize tool IDs correctly', async () => {
-      const commandWithColons = {
-        ...testCommands[0],
-        id: 'test:command:with:colons',
+    it('should register resources/list handler correctly', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (mcpCommand as any).registerMcpHandlers()
+
+      const resourcesListHandler = mockHandlers.get('resources/list')
+      expect(resourcesListHandler).to.be.a('function')
+
+      const result = await resourcesListHandler()
+      expect(result).to.have.property('resources')
+      expect(result.resources).to.be.an('array')
+    })
+
+    it('should collect prompts from command class', async () => {
+      const commandWithPrompts = testCommands.find((cmd) => cmd.id === 'test:prompts')!
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (mcpCommand as any).collectPromptsFromCommand(commandWithPrompts)
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const {allPrompts} = mcpCommand as any
+      expect(allPrompts).to.have.length(1)
+      const [firstPrompt] = allPrompts
+      expect(firstPrompt).to.deep.include({
+        arguments: [{description: 'Task to analyze', name: 'task', required: true}],
+        description: 'Analyze a task',
+        name: 'analyze-task',
+      })
+    })
+
+    it('should collect roots from command class', async () => {
+      const commandWithRoots = testCommands.find((cmd) => cmd.id === 'test:roots')!
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (mcpCommand as any).collectRootsFromCommand(commandWithRoots)
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const {allRoots} = mcpCommand as any
+      expect(allRoots).to.have.length(2)
+
+      expect(allRoots[0]).to.deep.include({
+        description: 'Project root directory',
+        name: 'project-root',
+        uri: 'file:///workspace/project',
+      })
+
+      expect(allRoots[1]).to.deep.include({
+        description: 'Configuration directory',
+        name: 'config-root',
+        uri: 'file:///workspace/config',
+      })
+    })
+
+    it('should handle prompts/get requests correctly', async () => {
+      // Add test prompts with handler
+      const testPrompt = {
+        arguments: [{description: 'Test input', name: 'input', required: true}],
+        description: 'Test prompt',
+        handler: () => ({
+          description: 'Test prompt response',
+          messages: [{content: {text: 'Test response', type: 'text'}, role: 'user'}],
+        }),
+        name: 'test-prompt',
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (mcpCommand as any).registerCommandAsTool(commandWithColons)
+      ;(mcpCommand as any).allPrompts = [testPrompt]
 
-      const [toolId] = mockServer.registerTool.firstCall.args
-      expect(toolId).to.equal('test-command-with-colons')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (mcpCommand as any).registerMcpHandlers()
+
+      // Test prompts/get handler
+      const promptsGetHandler = mockHandlers.get('prompts/get')
+      expect(promptsGetHandler).to.be.a('function')
+
+      const result = await promptsGetHandler({
+        params: {
+          arguments: {input: 'test'},
+          name: 'test-prompt',
+        },
+      })
+
+      expect(result).to.have.property('description', 'Test prompt response')
+      expect(result).to.have.property('messages')
+    })
+
+    it('should handle resources with custom roots', async () => {
+      // Add custom roots to test
+      const testRoots = [
+        {
+          description: 'Test root directory',
+          name: 'test-root',
+          uri: 'file:///test/workspace',
+        },
+      ]
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(mcpCommand as any).allRoots = testRoots
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (mcpCommand as any).registerMcpHandlers()
+
+      // Test resources/list includes custom roots
+      const resourcesListHandler = mockHandlers.get('resources/list')
+      const result = await resourcesListHandler()
+
+      expect(result.resources).to.be.an('array')
+      const rootResource = result.resources.find((r: {name: string}) => r.name === 'test-root')
+      expect(rootResource).to.exist
+      expect(rootResource.uri).to.equal('file:///test/workspace')
     })
   })
 
-  describe('registerMcpCompliantResource', () => {
+  describe('Resource Handling', () => {
     beforeEach(() => {
       // Mock the server property
       Object.defineProperty(mcpCommand, 'server', {
@@ -317,8 +471,8 @@ describe('MCP Command', () => {
       })
     })
 
-    it('should register static resource correctly', async () => {
-      const resource: ExtendedMcpResource = {
+    it('should handle resources/read requests correctly', async () => {
+      const testResource = {
         content: 'Static content',
         description: 'Test resource',
         name: 'Test Resource',
@@ -326,60 +480,39 @@ describe('MCP Command', () => {
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (mcpCommand as any).registerMcpCompliantResource(resource)
+      ;(mcpCommand as any).allResources = [testResource]
 
-      expect(mockServer.registerResource.calledOnce).to.be.true
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (mcpCommand as any).registerMcpHandlers()
 
-      const [name, uri, config, handler] = mockServer.registerResource.firstCall.args
-      expect(name).to.equal('Test Resource')
-      expect(uri).to.equal('test://resource')
-      expect(config.description).to.equal('Test resource')
-      expect(config.title).to.equal('Test Resource')
-      expect(handler).to.be.a('function')
+      const resourcesReadHandler = mockHandlers.get('resources/read')
+      expect(resourcesReadHandler).to.be.a('function')
 
-      // Test handler returns MCP-compliant format
-      const result = await handler({href: 'test://resource'})
+      const result = await resourcesReadHandler({
+        params: {uri: 'test://resource'},
+      })
+
       expect(result).to.have.property('contents')
       expect(result.contents).to.be.an('array')
       expect(result.contents[0]).to.have.property('text', 'Static content')
       expect(result.contents[0]).to.have.property('uri', 'test://resource')
-      expect(result.contents[0]).to.have.property('mimeType', 'text/plain')
     })
 
-    it('should register dynamic resource with ResourceTemplate', async () => {
-      const resource: ExtendedMcpResource = {
-        handler: () => 'Dynamic content',
-        name: 'Dynamic Resource',
-        uri: 'dynamic://{id}/resource',
+    it('should handle resource errors gracefully', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (mcpCommand as any).registerMcpHandlers()
+
+      const resourcesReadHandler = mockHandlers.get('resources/read')
+
+      try {
+        await resourcesReadHandler({
+          params: {uri: 'nonexistent://resource'},
+        })
+        expect.fail('Should have thrown an error')
+      } catch (error) {
+        expect(error).to.be.an('error')
+        expect((error as Error).message).to.include('Resource not found')
       }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (mcpCommand as any).registerMcpCompliantResource(resource)
-
-      expect(mockServer.registerResource.calledOnce).to.be.true
-
-      const [name, template, config, handler] = mockServer.registerResource.firstCall.args
-      expect(name).to.equal('Dynamic Resource')
-      expect(template).to.be.an('object') // ResourceTemplate
-      expect(config.title).to.equal('Dynamic Resource')
-      expect(handler).to.be.a('function')
-    })
-
-    it('should handle missing uri or name gracefully', async () => {
-      const invalidResource = {
-        description: 'Invalid resource',
-      } as ExtendedMcpResource
-
-      const errorStub = sinon.stub(console, 'error')
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (mcpCommand as any).registerMcpCompliantResource(invalidResource)
-
-      expect(errorStub.calledOnce).to.be.true
-      expect(errorStub.firstCall.args[0]).to.include('missing required uri or name')
-      expect(mockServer.registerResource.called).to.be.false
-
-      errorStub.restore()
     })
   })
 

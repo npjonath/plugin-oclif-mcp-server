@@ -36,10 +36,12 @@ The **Model Context Protocol (MCP)** is an open standard that enables AI assista
 - **📝 Schema Generation**: Converts oclif arguments and flags to Zod schemas for type-safe execution
 - **📊 MCP-Compliant Resources**: Full support for static and dynamic resources following MCP specification
 - **⚡ Resource Templates**: Support for parameterized resources with `{parameter}` syntax
+- **🎯 Prompt Templates**: Reusable prompt templates with argument validation and handlers
+- **🌳 Workspace Roots**: Automatic CLI working directory registration as MCP root
 - **🔄 Lazy Loading**: Resources are fetched on-demand through proper MCP endpoints
 - **🛡️ Error Handling**: Graceful error handling with detailed feedback
 - **⚙️ Zero Configuration**: Works out-of-the-box with any oclef CLI
-- **🎯 Standards Compliant**: Implements the official MCP specification
+- **📋 Standards Compliant**: Implements the official MCP specification
 
 ## 📦 Installation
 
@@ -352,6 +354,231 @@ export default class ExampleCommand extends Command {
 }
 ```
 
+### 🎯 MCP-Compliant Prompts
+
+Prompts provide reusable templates that help AI assistants interact with your CLI more effectively. They follow the [official MCP specification](https://modelcontextprotocol.io/docs/concepts/prompts) using `prompts/list` and `prompts/get` endpoints.
+
+#### How Prompts Work
+
+The plugin automatically implements the MCP prompts protocol:
+
+1. **Discovery**: AI assistants call `prompts/list` to discover available prompts
+2. **Execution**: AI assistants call `prompts/get` with prompt name and arguments
+3. **Response**: Prompts return structured messages for LLM processing
+
+#### Static Prompts
+
+Define reusable prompt templates on your command classes:
+
+```typescript
+export default class AnalyzeCommand extends Command {
+  static mcpPrompts = [
+    {
+      name: 'analyze-logs',
+      description: 'Analyze application logs for issues',
+      arguments: [
+        {
+          name: 'logLevel',
+          description: 'Log level to focus on (error, warn, info)',
+          required: false,
+        },
+        {
+          name: 'timeRange',
+          description: 'Time range to analyze (e.g., "last 1 hour")',
+          required: true,
+        },
+      ],
+    },
+  ]
+}
+```
+
+#### Dynamic Prompts
+
+Generate prompts programmatically based on current state:
+
+```typescript
+export default class DeployCommand extends Command {
+  // Static method for dynamic prompt generation
+  static async getMcpPrompts() {
+    const environments = await this.getAvailableEnvironments()
+
+    return [
+      {
+        name: 'deploy-with-confirmation',
+        description: 'Deploy with safety confirmation prompts',
+        arguments: [
+          {
+            name: 'environment',
+            description: `Target environment: ${environments.join(', ')}`,
+            required: true,
+          },
+          {
+            name: 'skipChecks',
+            description: 'Skip pre-deployment safety checks',
+            required: false,
+          },
+        ],
+      },
+    ]
+  }
+
+  private static async getAvailableEnvironments() {
+    return ['development', 'staging', 'production']
+  }
+}
+```
+
+#### Prompts with Custom Handlers
+
+Create prompts that generate dynamic responses:
+
+```typescript
+export default class StatusCommand extends Command {
+  // Instance method for dynamic prompts
+  async getMcpPrompts() {
+    return [
+      {
+        name: 'troubleshoot-status',
+        description: `Troubleshoot ${this.config.name} status issues`,
+        arguments: [
+          {
+            name: 'component',
+            description: 'Specific component to troubleshoot',
+            required: false,
+          },
+        ],
+        handler: 'generateTroubleshootingPrompt',
+      },
+    ]
+  }
+
+  async generateTroubleshootingPrompt(args: any) {
+    const status = await this.getSystemStatus()
+
+    return {
+      description: 'Troubleshooting guidance based on current system status',
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: `Please help troubleshoot ${args.component || 'the system'}. Current status: ${JSON.stringify(status, null, 2)}`,
+          },
+        },
+      ],
+    }
+  }
+
+  private async getSystemStatus() {
+    return {
+      status: 'running',
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+    }
+  }
+}
+```
+
+#### MCP Protocol Compliance
+
+The prompts implementation follows the [official MCP specification](https://modelcontextprotocol.io/docs/concepts/prompts):
+
+- ✅ **`prompts/list`** - Lists all available prompts with names, descriptions, and arguments
+- ✅ **`prompts/get`** - Executes specific prompts with argument validation
+- ✅ **Argument validation** - Ensures required arguments are provided
+- ✅ **Handler support** - Function handlers, method references, and defaults
+- ✅ **Structured responses** - Returns properly formatted message arrays for LLMs
+
+### 🌳 MCP Roots Support
+
+Roots provide workspace boundaries and context for AI assistants. You can define custom roots or use the automatic default working directory root.
+
+#### Custom Roots
+
+Define custom workspace roots in your commands:
+
+```typescript
+export default class WorkspaceCommand extends Command {
+  static mcpRoots = [
+    {
+      name: 'project-root',
+      uri: 'file:///path/to/project',
+      description: 'Main project directory',
+    },
+    {
+      name: 'config-root',
+      uri: 'file:///path/to/config',
+      description: 'Configuration files directory',
+    },
+  ]
+}
+```
+
+#### Dynamic Roots
+
+Generate roots programmatically:
+
+```typescript
+export default class ProjectCommand extends Command {
+  // Static method for dynamic root generation
+  static async getMcpRoots() {
+    const projectPaths = await this.getProjectPaths()
+
+    return projectPaths.map((path) => ({
+      name: path.name,
+      uri: `file://${path.fullPath}`,
+      description: `${path.name} workspace directory`,
+    }))
+  }
+
+  private static async getProjectPaths() {
+    // Your logic to discover project paths
+    return [
+      {name: 'frontend', fullPath: '/workspace/frontend'},
+      {name: 'backend', fullPath: '/workspace/backend'},
+    ]
+  }
+}
+```
+
+#### Instance Method Roots
+
+Roots that need access to command instance:
+
+```typescript
+export default class EnvironmentCommand extends Command {
+  // Instance method for dynamic roots
+  async getMcpRoots() {
+    const envConfig = this.config.get('environment')
+
+    return [
+      {
+        name: 'env-root',
+        uri: `file://${envConfig.rootPath}`,
+        description: `${envConfig.name} environment root directory`,
+      },
+    ]
+  }
+}
+```
+
+#### Automatic Fallback Root
+
+When no custom roots are defined, the plugin automatically registers your CLI's current working directory:
+
+- **URI**: `file://[current-working-directory]`
+- **Name**: "CLI Working Directory"
+- **Purpose**: Provides AI assistants with workspace context for file operations
+
+#### Benefits for AI Assistants
+
+- **Workspace Understanding**: AI assistants know the project boundaries
+- **File Context**: Better understanding of relative paths and project structure
+- **Security**: Clear boundaries for file system access
+- **Navigation**: Helps AI assistants understand the project layout
+- **Multi-workspace Support**: Support for complex projects with multiple roots
+
 ### Command Filtering
 
 The MCP server automatically filters commands:
@@ -397,6 +624,8 @@ This plugin implements the full MCP specification:
 | **Static Resources**   | ✅ Complete | Direct URI registration                         |
 | **Dynamic Resources**  | ✅ Complete | ResourceTemplate with parameters                |
 | **Resource Templates** | ✅ Complete | `{parameter}` syntax support                    |
+| **Prompts**            | ✅ Complete | Reusable prompt templates with argument support |
+| **Roots**              | ✅ Complete | CLI workspace directory as MCP root             |
 | **Content Types**      | ✅ Complete | Proper MIME type handling                       |
 | **Error Handling**     | ✅ Complete | Graceful error responses                        |
 | **Schema Validation**  | ✅ Complete | Zod schema generation from oclif definitions    |
