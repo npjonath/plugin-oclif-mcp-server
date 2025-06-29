@@ -1,3 +1,9 @@
+## [0.3.1](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.3.0...0.3.1) (2025-06-29)
+
+### Bug Fixes
+
+- issue when running mcp inspector ([ce75073](https://github.com/npjonath/oclif-plugin-mcp-server/commit/ce750739feab4dbb1bc1c2e36c51ec0d0d936dfb))
+
 # [0.3.0](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.2.4...0.3.0) (2025-06-28)
 
 ### Features
