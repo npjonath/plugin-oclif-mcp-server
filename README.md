@@ -12,13 +12,7 @@ This plugin automatically converts your oclif CLI commands into a **fully MCP-co
 
 ## ✨ What's New
 
-🎉 **Fully MCP-Compliant**: Now implements the official [Model Context Protocol](https://modelcontextprotocol.io) specification with:
-
-- ✅ **`resources/list`** endpoint for resource discovery
-- ✅ **`resources/read`** endpoint for on-demand content fetching
-- ✅ **Static and dynamic resources** with handler support
-- ✅ **Proper content separation** following MCP best practices
-- ✅ **Type-safe resource handlers** with full metadata support
+🎉 **MCP-Compliant**: Enhanced implementation with comprehensive MCP specification compliance:
 
 ## What is MCP?
 
@@ -38,23 +32,15 @@ The **Model Context Protocol (MCP)** is an open standard that enables AI assista
 - **🎯 Prompt Templates**: Reusable prompt templates with argument validation and handlers
 - **🌳 Workspace Roots**: Automatic CLI working directory registration as MCP root
 - **🔄 Lazy Loading**: Resources are fetched on-demand through proper MCP endpoints
-- **🛡️ Error Handling**: Graceful error handling with detailed feedback
-- **⚙️ Zero Configuration**: Works out-of-the-box with any oclef CLI
+- **🛡️ Error Handling**: Graceful error handling with detailed feedback and proper JSON-RPC error codes
+- **⚙️ Zero Configuration**: Works out-of-the-box with any oclif CLI
 - **📋 Standards Compliant**: Implements the official MCP specification
+- **✅ Input Validation**: Type-safe argument validation for all commands and prompts
+- **🔔 Smart Notifications**: Debounced resource change notifications for optimal performance
 
 ## 📦 Installation
 
-### From GitHub (Recommended)
-
-```bash
-# Install directly from GitHub (requires oclif-plugin-plugins)
-your-cli plugins install npjonath/oclif-plugin-mcp-server
-
-# Verify installation
-your-cli mcp --help
-```
-
-### Embed plugin in your CLI code
+### Embed plugin in your CLI code (Recommended)
 
 Add to your CLI's `package.json`:
 
@@ -69,13 +55,23 @@ Add to your CLI's `package.json`:
 }
 ```
 
+### From GitHub
+
+```bash
+# Install directly from GitHub (requires oclif-plugin-plugins)
+your-cli plugins install npjonath/oclif-plugin-mcp-server
+
+# Verify installation
+your-cli mcp --help
+```
+
 ## 🎯 Quick Start
 
 ### 1. Configure AI Assistant
 
 Add your CLI to your AI assistant's MCP configuration:
 
-#### Cursor (cursor_settings.json)
+#### Cursor (mcp.json)
 
 ```json
 {
@@ -89,7 +85,7 @@ Add your CLI to your AI assistant's MCP configuration:
 }
 ```
 
-#### Claude Desktop (claude_desktop_config.json)
+#### Claude Desktop
 
 ```json
 {
@@ -135,26 +131,39 @@ Your AI assistant can now discover and use your CLI commands and resources:
    🔍 Logs: [deployment details...]
 ```
 
-## 📚 Advanced Usage
+## 🔒 Security Considerations
 
-### Disable Commands from MCP autodiscovery
+This plugin exposes your CLI commands to AI assistants through the MCP protocol. Consider these security aspects:
 
-Add the `disableMCP` property to commands you want to exclude:
+### Trust Boundaries
+
+- **Local Development**: When running locally, the plugin operates in your user context with your permissions
+- **Production Use**: Only expose commands that are safe for AI assistants to execute
+- **Sensitive Operations**: Use the `disableMCP` flag for commands that perform sensitive operations
+
+### Command Safety
 
 ```typescript
-// src/commands/deploy.ts
-import {Command, Flags} from '@oclif/core'
-
-export default class MyCommand extends Command {
-  static description = 'Deploy your application'
-  static disableMCP = true // 👈 disable this command for MCP autodiscovery
+export default class SensitiveCommand extends Command {
+  static description = 'This command performs sensitive operations'
+  static disableMCP = true // 🔒 Exclude from MCP exposure
 
   async run() {
-    const {args, flags} = await this.parse(Deploy)
-    // ... command logic
+    // Sensitive operations that shouldn't be exposed to AI
   }
 }
 ```
+
+### Recommended Practices
+
+- ✅ **Review exposed commands** before deployment
+- ✅ **Use tool annotations** to clearly mark destructive operations
+- ✅ **Implement proper validation** in your command handlers
+- ✅ **Monitor MCP usage** in production environments
+- ⚠️ **Avoid exposing commands** that modify system-level configurations
+- ⚠️ **Be cautious with file operations** that could affect sensitive data
+
+## 📚 Advanced Usage
 
 ### Custom Tool IDs
 
@@ -198,6 +207,61 @@ export default class StatusCommand extends Command {
     idempotentHint: true, // Multiple calls return same result
     openWorldHint: true, // May check external systems
   }
+
+  async run() {
+    // ... status logic
+  }
+}
+```
+
+### Enhanced Prompt Templates
+
+Create prompts with advanced argument validation:
+
+```typescript
+import {Command} from '@oclif/core'
+import {z} from 'zod'
+
+export default class AnalyzeCommand extends Command {
+  static description = 'Analyze code and provide insights'
+
+  // Define prompts with custom validation schemas
+  static mcpPrompts = [
+    {
+      name: 'code-review',
+      description: 'Review code for best practices and potential issues',
+      arguments: [
+        {name: 'filePath', required: true, description: 'Path to the file to review'},
+        {name: 'severity', required: false, description: 'Minimum severity level'},
+      ],
+      // Custom Zod schema for advanced validation
+      argumentSchema: z.object({
+        filePath: z.string().min(1, 'File path is required'),
+        severity: z.enum(['low', 'medium', 'high']).default('medium'),
+        includePerformance: z.boolean().default(false),
+      }),
+      handler: 'handleCodeReview', // Method name to call
+    },
+  ]
+
+  async handleCodeReview(args: {filePath: string; severity: string; includePerformance: boolean}) {
+    // Custom prompt handler with validated arguments
+    return {
+      description: `Code review for ${args.filePath}`,
+      messages: [
+        {
+          role: 'assistant' as const,
+          content: {
+            type: 'text' as const,
+            text: `I'll review the file "${args.filePath}" for ${args.severity} and above issues.${
+              args.includePerformance ? ' Including performance analysis.' : ''
+            }`,
+          },
+        },
+      ],
+    }
+  }
+}
 
   async run() {
     // ... status check logic
@@ -491,15 +555,6 @@ export default class NotificationCommand extends Command {
   }
 }
 
-// In your MCP server instance:
-const mcpServer = new Mcp([], config)
-
-// Generate URIs programmatically using templates
-const alertUri = mcpServer.generateResourceUri('Alert Notification Template', {
-  alertId: '12345',
-})
-// Returns: "notifications://alert/12345"
-
 // Subscribers automatically receive notifications when resources change
 // The server sends proper MCP notifications:
 // - notifications/resources/updated (for specific resource changes)
@@ -743,50 +798,108 @@ The MCP server automatically filters commands:
 
 ```mermaid
 graph TB
-    A[AI Assistant] -->|MCP Protocol| B[oclif-plugin-mcp-server]
-    B -->|resources/list| C[Resource Discovery]
-    B -->|resources/read| D[Content Fetching]
-    B -->|tools/call| E[Command Execution]
+    A[AI Assistant] -->|MCP JSON-RPC| B[oclif-plugin-mcp-server]
 
-    B -->|Auto-discovery| F[oclif Commands]
-    B -->|Schema Generation| G[Zod Validation]
-    B -->|Resource Registration| H[Static/Dynamic Resources]
+    subgraph "MCP Protocol Handlers"
+        B -->|tools/list| C[Tool Discovery]
+        B -->|tools/call| D[Command Execution]
+        B -->|resources/list| E[Resource Discovery]
+        B -->|resources/read| F[Content Fetching]
+        B -->|prompts/list| G[Prompt Discovery]
+        B -->|prompts/get| H[Prompt Execution]
+        B -->|resources/subscribe| I[Subscription Management]
+    end
 
-    F -->|Execution| I[Command Output]
-    H -->|Template Processing| J[Parameterized Content]
+    subgraph "Auto-Discovery Engine"
+        C -->|Scan Commands| J[oclif Command Registry]
+        J -->|Generate Schemas| K[Zod Schema Builder]
+        J -->|Extract Metadata| L[Tool Annotations]
+    end
 
-    I -->|Response| A
-    J -->|Resource Content| A
+    subgraph "Validation & Execution"
+        D -->|Input Validation| K
+        K -->|Validated Args| M[Command Runner]
+        M -->|Capture Output| N[stdout/stderr Handler]
+        N -->|Format Response| O[MCP Response Builder]
+    end
+
+    subgraph "Resource Management"
+        E -->|Static Resources| P[Direct Content]
+        E -->|Dynamic Resources| Q[Handler Functions]
+        E -->|Resource Templates| R[URI Template Engine]
+        F -->|URI Matching| R
+        R -->|Parameter Extraction| S[Template Resolver]
+        Q -->|Method Calls| T[Resource Handlers]
+        P -->|Direct Content| U[Content Formatter]
+        T -->|Generated Content| U
+        S -->|Resolved Content| U
+    end
+
+    subgraph "Prompt System"
+        G -->|Template Discovery| V[Prompt Registry]
+        H -->|Argument Validation| W[Prompt Validator]
+        W -->|Execute Handler| X[Prompt Response Builder]
+    end
+
+    subgraph "Notification System"
+        Y[Resource Change Detector] -->|Debounced Events| Z[Notification Queue]
+        Z -->|Batch Notifications| AA[MCP Notifier]
+        AA -->|notifications/resources/updated| A
+        AA -->|notifications/resources/list_changed| A
+    end
+
+    subgraph "Error Handling"
+        BB[Error Interceptor] -->|JSON-RPC Codes| CC[MCP Error Builder]
+        CC -->|Structured Errors| DD[Error Response]
+    end
+
+    O -->|Tool Response| A
+    U -->|Resource Content| A
+    X -->|Prompt Messages| A
+    DD -->|Error Details| A
+
+    M -.->|Triggers| Y
+    T -.->|Triggers| Y
+    D -.->|On Error| BB
+    F -.->|On Error| BB
+    H -.->|On Error| BB
 
     style B fill:#e1f5fe
-    style C fill:#f3e5f5
-    style D fill:#f3e5f5
-    style E fill:#e8f5e8
+    style J fill:#f3e5f5
+    style K fill:#e8f5e8
+    style R fill:#fff3e0
+    style Y fill:#f1f8e9
+    style BB fill:#ffebee
 ```
 
 ## 🔄 MCP Protocol Compliance
 
-This plugin implements the full MCP specification:
+This plugin implements the full MCP specification with enhanced compliance features:
 
-| MCP Feature             | Status      | Implementation                                    |
-| ----------------------- | ----------- | ------------------------------------------------- |
-| **Tools**               | ✅ Complete | All oclif commands auto-discovered as tools       |
-| **Tool Annotations**    | ✅ Complete | Support for readOnlyHint, destructiveHint, etc.   |
-| **Resources**           | ✅ Complete | `resources/list` and `resources/read` endpoints   |
-| **Static Resources**    | ✅ Complete | Direct content and URI registration with size     |
-| **Dynamic Resources**   | ✅ Complete | Function and method handlers                      |
-| **Resource Templates**  | ✅ Complete | RFC 6570 URI templates with automatic resolution  |
-| **Binary Resources**    | ✅ Complete | Buffer support with base64 encoding               |
-| **URI Resolution**      | ✅ Complete | Parameter extraction from templated URIs          |
-| **Multiple Resources**  | ✅ Complete | Single read request can return multiple resources |
-| **Resource Updates**    | ✅ Complete | Real-time MCP notifications for resource changes  |
-| **URI Generation**      | ✅ Complete | Public API for programmatic URI template creation |
-| **Notification System** | ✅ Complete | Full MCP notification protocol implementation     |
-| **Prompts**             | ✅ Complete | Reusable prompt templates with argument support   |
-| **Roots**               | ✅ Complete | CLI workspace directory as MCP root               |
-| **Content Types**       | ✅ Complete | Proper MIME type handling                         |
-| **Error Handling**      | ✅ Complete | Graceful error responses                          |
-| **Schema Validation**   | ✅ Complete | Zod schema generation from oclif definitions      |
+| MCP Feature                 | Status      | Implementation                                    |
+| --------------------------- | ----------- | ------------------------------------------------- |
+| **Tools**                   | ✅ Complete | All oclif commands auto-discovered as tools       |
+| **Tool Annotations**        | ✅ Complete | Support for readOnlyHint, destructiveHint, etc.   |
+| **Resources**               | ✅ Complete | `resources/list` and `resources/read` endpoints   |
+| **Static Resources**        | ✅ Complete | Direct content and URI registration with size     |
+| **Dynamic Resources**       | ✅ Complete | Function and method handlers                      |
+| **Resource Templates**      | ✅ Complete | RFC 6570 URI templates with automatic resolution  |
+| **Binary Resources**        | ✅ Complete | Buffer support with base64 encoding               |
+| **URI Resolution**          | ✅ Complete | Parameter extraction from templated URIs          |
+| **Multiple Resources**      | ✅ Complete | Single read request can return multiple resources |
+| **Resource Updates**        | ✅ Complete | Real-time MCP notifications for resource changes  |
+| **URI Generation**          | ✅ Complete | Public API for programmatic URI template creation |
+| **Notification System**     | ✅ Complete | Full MCP notification protocol implementation     |
+| **Prompts**                 | ✅ Complete | Reusable prompt templates with argument support   |
+| **Roots**                   | ✅ Complete | CLI workspace directory as MCP root               |
+| **Content Types**           | ✅ Complete | Proper MIME type handling                         |
+| **Error Handling**          | ✅ Complete | Graceful error responses                          |
+| **Schema Validation**       | ✅ Complete | Zod schema generation from oclif definitions      |
+| **Input Validation**        | ✅ Enhanced | Full Zod validation for all tool arguments        |
+| **JSON-RPC Errors**         | ✅ Enhanced | Proper MCP error codes (-32xxx) for all errors    |
+| **Prompt Validation**       | ✅ Enhanced | Type-safe prompt argument parsing                 |
+| **Debounced Notifications** | ✅ Enhanced | Optimized resource change notifications           |
+| **Enhanced Prompts**        | ✅ Enhanced | Interactive assistant-style prompt responses      |
 
 ## 📋 Examples
 

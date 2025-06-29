@@ -11,7 +11,7 @@ import {
   UnsubscribeRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import {Command, Interfaces} from '@oclif/core'
-import {z, ZodTypeAny} from 'zod'
+import {z, ZodSchema, ZodTypeAny} from 'zod'
 
 export interface McpResource {
   content?: string
@@ -42,13 +42,14 @@ export interface McpToolAnnotations {
   readOnlyHint?: boolean
 }
 
-// Add prompt interface following MCP specification
+// Add prompt interface following MCP specification with argument validation
 export interface McpPrompt {
   arguments?: Array<{
     description?: string
     name: string
     required?: boolean
   }>
+  argumentSchema?: ZodSchema
   description?: string
   handler?: (() => Promise<PromptResult> | PromptResult) | string
   name: string
@@ -79,6 +80,16 @@ export interface McpRoot {
   uri: string
 }
 
+// MCP Error codes following JSON-RPC specification
+export const MCP_ERROR_CODES = {
+  INVALID_PARAMS: -32_602,
+  METHOD_NOT_FOUND: -32_601,
+  PARSE_ERROR: -32_700,
+  PROMPT_NOT_FOUND: -32_003,
+  RESOURCE_NOT_FOUND: -32_002,
+  TOOL_NOT_FOUND: -32_001,
+} as const
+
 export default class Mcp extends Command {
   static override description = 'Start MCP (Model Context Protocol) server for AI assistant integration'
   static override examples = ['$ sm mcp']
@@ -87,6 +98,9 @@ export default class Mcp extends Command {
   private allResources: McpResource[] = []
   private allResourceTemplates: McpResourceTemplate[] = []
   private allRoots: McpRoot[] = []
+  // Add debouncing for notifications
+  private notificationDebounceTimer: NodeJS.Timeout | null = null
+  private pendingNotifications = new Set<string>()
   private resourceSubscriptions = new Set<string>()
   private server!: Server
 
@@ -285,6 +299,27 @@ export default class Mcp extends Command {
   }
 
   /**
+   * Build Zod schema for prompt arguments validation
+   */
+  private buildPromptArgumentSchema(prompt: McpPrompt): ZodSchema {
+    if (prompt.argumentSchema) {
+      return prompt.argumentSchema
+    }
+
+    if (!prompt.arguments || prompt.arguments.length === 0) {
+      return z.object({})
+    }
+
+    const schema: Record<string, ZodTypeAny> = {}
+    for (const arg of prompt.arguments) {
+      const baseSchema = z.string()
+      schema[arg.name] = arg.required ? baseSchema : baseSchema.optional()
+    }
+
+    return z.object(schema)
+  }
+
+  /**
    * Collect prompts from a command class
    */
   private async collectPromptsFromCommand(cmdClass: Command.Loadable): Promise<void> {
@@ -400,6 +435,16 @@ export default class Mcp extends Command {
   }
 
   /**
+   * Create an MCP-compliant error with proper JSON-RPC error code
+   */
+  private createMcpError(code: number, message: string, data?: unknown): Error {
+    const error = new Error(message) as Error & {code?: number; data?: unknown}
+    error.code = code
+    if (data) error.data = data
+    return error
+  }
+
+  /**
    * Get the content for a resource by executing its handler or returning static content
    */
   private async getResourceContent(
@@ -455,7 +500,8 @@ export default class Mcp extends Command {
    */
   private matchUriTemplate(uri: string, template: string): null | Record<string, string> {
     // Simple pattern matching for {param} style templates
-    const templateRegex = template.replaceAll(/\{([^}]+)\}/g, '([^/]+)')
+    // Use (.+?) for non-greedy matching to allow any characters including slashes
+    const templateRegex = template.replaceAll(/\{([^}]+)\}/g, '(.+?)')
     const regex = new RegExp(`^${templateRegex}$`)
     const match = uri.match(regex)
 
@@ -473,11 +519,22 @@ export default class Mcp extends Command {
   }
 
   private notifyResourceListChanged(cmdId: string, context: string): void {
-    setTimeout(() => {
+    // Add to pending notifications
+    this.pendingNotifications.add(`${cmdId}:${context}`)
+
+    // Clear existing timer and set new one for debouncing
+    if (this.notificationDebounceTimer) {
+      clearTimeout(this.notificationDebounceTimer)
+    }
+
+    this.notificationDebounceTimer = setTimeout(() => {
       this.sendResourceListChangedNotification().catch((error) => {
-        console.error(`Failed to send resource list notification after ${context} for ${cmdId}:`, error)
+        console.error(`Failed to send batched resource list notification:`, error)
       })
-    }, 50)
+      // Clear pending notifications after sending
+      this.pendingNotifications.clear()
+      this.notificationDebounceTimer = null
+    }, 100) // Debounce for 100ms to batch multiple rapid changes
   }
 
   /**
@@ -528,7 +585,7 @@ export default class Mcp extends Command {
       return {tools}
     })
 
-    // Register tools/call handler
+    // Register tools/call handler with input validation
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const toolName = request.params.name
       const input = request.params.arguments || {}
@@ -538,45 +595,60 @@ export default class Mcp extends Command {
       )
 
       if (!cmdClass) {
-        throw new Error(`Tool not found: ${toolName}`)
+        throw this.createMcpError(MCP_ERROR_CODES.TOOL_NOT_FOUND, `Tool not found: ${toolName}`)
       }
 
-      const argv = this.buildArgv(input, cmdClass)
-
-      let out = ''
-      const originalWrite = process.stdout.write.bind(process.stdout)
-      process.stdout.write = (chunk: string | Uint8Array) => {
-        out += chunk.toString()
-        return true
-      }
-
+      // Validate input using Zod schema
       try {
-        // Load the command class (oclif uses lazy loading)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let CommandClass: any = cmdClass
-        if (typeof cmdClass.load === 'function') {
-          CommandClass = await cmdClass.load()
+        const inputSchema = z.object(this.buildInputSchema(cmdClass))
+        const validatedInput = inputSchema.parse(input)
+        const argv = this.buildArgv(validatedInput, cmdClass)
+
+        let out = ''
+        const originalWrite = process.stdout.write.bind(process.stdout)
+        process.stdout.write = (chunk: string | Uint8Array) => {
+          out += chunk.toString()
+          return true
         }
 
-        // Create instance and run the command
-        const instance = new CommandClass(argv, this.config)
-        await instance.run()
-        return {
-          content: [{text: out.trim() || '(command finished)', type: 'text'}],
+        try {
+          // Load the command class (oclif uses lazy loading)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let CommandClass: any = cmdClass
+          if (typeof cmdClass.load === 'function') {
+            CommandClass = await cmdClass.load()
+          }
+
+          // Create instance and run the command
+          const instance = new CommandClass(argv, this.config)
+          await instance.run()
+          return {
+            content: [{text: out.trim() || '(command finished)', type: 'text'}],
+          }
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          return {
+            content: [
+              {
+                text: `Error: ${errorMessage}${out ? `\nOutput: ${out.trim()}` : ''}`,
+                type: 'text',
+              },
+            ],
+            isError: true,
+          }
+        } finally {
+          process.stdout.write = originalWrite
         }
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        return {
-          content: [
-            {
-              text: `Error: ${errorMessage}${out ? `\nOutput: ${out.trim()}` : ''}`,
-              type: 'text',
-            },
-          ],
-          isError: true,
+      } catch (validationError) {
+        if (validationError instanceof z.ZodError) {
+          throw this.createMcpError(
+            MCP_ERROR_CODES.INVALID_PARAMS,
+            `Invalid tool arguments: ${validationError.message}`,
+            validationError.errors,
+          )
         }
-      } finally {
-        process.stdout.write = originalWrite
+
+        throw this.createMcpError(MCP_ERROR_CODES.INVALID_PARAMS, `Invalid tool arguments: ${validationError}`)
       }
     })
 
@@ -589,51 +661,76 @@ export default class Mcp extends Command {
       })),
     }))
 
-    // Register prompts/get handler following MCP specification
+    // Register prompts/get handler following MCP specification with argument validation
     this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
       const promptName = request.params.name
       const args = request.params.arguments || {}
 
       const prompt = this.allPrompts.find((p) => p.name === promptName)
       if (!prompt) {
-        throw new Error(`Prompt not found: ${promptName}`)
+        throw this.createMcpError(MCP_ERROR_CODES.PROMPT_NOT_FOUND, `Prompt not found: ${promptName}`)
       }
 
-      // Execute prompt handler if exists
-      if (prompt.handler) {
-        if (typeof prompt.handler === 'function') {
-          return prompt.handler()
-        }
+      // Validate prompt arguments
+      try {
+        const argumentSchema = this.buildPromptArgumentSchema(prompt)
+        const validatedArgs = argumentSchema.parse(args)
 
-        if (typeof prompt.handler === 'string') {
-          // Try to call method on instance or class
-          const promptWithContext = prompt as McpPrompt & {
-            commandClass?: Command.Loadable
-            commandInstance?: Command
-          }
-          const target = promptWithContext.commandInstance || promptWithContext.commandClass
-          const method = target?.[prompt.handler as keyof typeof target]
-
-          if (method && typeof method === 'function') {
-            return method.call(target, args)
+        // Execute prompt handler if exists
+        if (prompt.handler) {
+          if (typeof prompt.handler === 'function') {
+            return prompt.handler()
           }
 
-          throw new Error(`Prompt handler method '${prompt.handler}' not found`)
-        }
-      }
+          if (typeof prompt.handler === 'string') {
+            // Try to call method on instance or class
+            const promptWithContext = prompt as McpPrompt & {
+              commandClass?: Command.Loadable
+              commandInstance?: Command
+            }
+            const target = promptWithContext.commandInstance || promptWithContext.commandClass
+            const method = target?.[prompt.handler as keyof typeof target]
 
-      // Default prompt response following MCP specification
-      return {
-        description: prompt.description || `Prompt: ${prompt.name}`,
-        messages: [
-          {
-            content: {
-              text: `Execute prompt: ${prompt.name}${args ? ` with arguments: ${JSON.stringify(args)}` : ''}`,
-              type: 'text' as const,
+            if (method && typeof method === 'function') {
+              return method.call(target, validatedArgs)
+            }
+
+            throw this.createMcpError(
+              MCP_ERROR_CODES.METHOD_NOT_FOUND,
+              `Prompt handler method '${prompt.handler}' not found`,
+            )
+          }
+        }
+
+        // Enhanced default prompt response with richer content
+        return {
+          description: prompt.description || `Interactive prompt: ${prompt.name}`,
+          messages: [
+            {
+              content: {
+                text: `You are about to execute the prompt "${prompt.name}".${
+                  prompt.description ? `\n\nDescription: ${prompt.description}` : ''
+                }${
+                  Object.keys(validatedArgs).length > 0
+                    ? `\n\nWith the following validated arguments:\n${JSON.stringify(validatedArgs, null, 2)}`
+                    : '\n\nNo arguments provided.'
+                }\n\nHow would you like to proceed?`,
+                type: 'text' as const,
+              },
+              role: 'assistant' as const,
             },
-            role: 'user' as const,
-          },
-        ],
+          ],
+        }
+      } catch (validationError) {
+        if (validationError instanceof z.ZodError) {
+          throw this.createMcpError(
+            MCP_ERROR_CODES.INVALID_PARAMS,
+            `Invalid prompt arguments: ${validationError.message}`,
+            validationError.errors,
+          )
+        }
+
+        throw this.createMcpError(MCP_ERROR_CODES.INVALID_PARAMS, `Invalid prompt arguments: ${validationError}`)
       }
     })
 
@@ -761,7 +858,7 @@ export default class Mcp extends Command {
       }
 
       if (contents.length === 0) {
-        throw new Error(`Resource not found: ${uri}`)
+        throw this.createMcpError(MCP_ERROR_CODES.RESOURCE_NOT_FOUND, `Resource not found: ${uri}`)
       }
 
       return {contents}

@@ -3,11 +3,12 @@ import {expect} from 'chai'
 import sinon from 'sinon'
 import {z} from 'zod'
 
-import McpCommand, {CommandInput, McpResource} from '../../../src/commands/mcp/index.js'
+import McpCommand, {CommandInput, MCP_ERROR_CODES, McpResource} from '../../../src/commands/mcp/index.js'
 
 // Mock MCP Server and Transport - using low-level Server API
 const mockServer = {
   connect: sinon.stub().resolves(),
+  notification: sinon.stub().resolves(),
   setRequestHandler: sinon.stub(),
 }
 
@@ -52,6 +53,15 @@ const testCommands = [
         arguments: [{description: 'Task to analyze', name: 'task', required: true}],
         description: 'Analyze a task',
         name: 'analyze-task',
+      },
+      {
+        arguments: [{description: 'Optional context', name: 'context', required: false}],
+        argumentSchema: z.object({
+          context: z.string().optional(),
+          priority: z.enum(['low', 'medium', 'high']).default('medium'),
+        }),
+        description: 'Process with custom validation',
+        name: 'process-with-validation',
       },
     ],
     mcpResources: [
@@ -132,6 +142,7 @@ describe('MCP Command', () => {
     // Reset all stubs
     mockServer.connect.resetHistory()
     mockServer.setRequestHandler.resetHistory()
+    mockServer.notification.resetHistory()
     mockHandlers.clear()
 
     // Set up mock setRequestHandler to capture handlers by call order
@@ -147,6 +158,30 @@ describe('MCP Command', () => {
 
   afterEach(() => {
     sinon.restore()
+  })
+
+  describe('MCP Error Codes', () => {
+    it('should define proper JSON-RPC error codes', () => {
+      expect(MCP_ERROR_CODES.INVALID_PARAMS).to.equal(-32_602)
+      expect(MCP_ERROR_CODES.METHOD_NOT_FOUND).to.equal(-32_601)
+      expect(MCP_ERROR_CODES.PARSE_ERROR).to.equal(-32_700)
+      expect(MCP_ERROR_CODES.PROMPT_NOT_FOUND).to.equal(-32_003)
+      expect(MCP_ERROR_CODES.RESOURCE_NOT_FOUND).to.equal(-32_002)
+      expect(MCP_ERROR_CODES.TOOL_NOT_FOUND).to.equal(-32_001)
+    })
+  })
+
+  describe('createMcpError', () => {
+    it('should create proper MCP-compliant errors', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const error = (mcpCommand as any).createMcpError(MCP_ERROR_CODES.TOOL_NOT_FOUND, 'Tool not found: test-tool', {
+        toolName: 'test-tool',
+      }) as Error & {code?: number; data?: unknown}
+
+      expect(error.message).to.equal('Tool not found: test-tool')
+      expect(error.code).to.equal(MCP_ERROR_CODES.TOOL_NOT_FOUND)
+      expect(error.data).to.deep.equal({toolName: 'test-tool'})
+    })
   })
 
   describe('buildArgv', () => {
@@ -198,28 +233,100 @@ describe('MCP Command', () => {
       expect(schema).to.have.property('verbose')
       expect(schema).to.have.property('arg1')
 
-      // Test that the schema validates correctly
-      const validInput = {
-        arg1: 'test',
-        flag1: 'value',
-        verbose: true,
-      }
-
-      const result = z.object(schema).parse(validInput)
+      // Test schema validation
+      const inputSchema = z.object(schema)
+      const validInput = {arg1: 'test', flag1: 'value', verbose: true}
+      const result = inputSchema.parse(validInput)
       expect(result).to.deep.equal(validInput)
     })
 
-    it('should handle optional flags and args', () => {
+    it('should handle commands with no flags or args', () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const schema = (mcpCommand as any).buildInputSchema(testCommands[0])
+      const schema = (mcpCommand as any).buildInputSchema({args: {}, flags: {}})
+      expect(Object.keys(schema)).to.have.length(0)
+    })
+  })
 
-      // Should allow missing optional fields
-      const minimalInput = {
-        arg1: 'test', // Required arg
+  describe('buildPromptArgumentSchema', () => {
+    it('should build schema from prompt arguments', () => {
+      const prompt = {
+        arguments: [
+          {name: 'task', required: true},
+          {name: 'priority', required: false},
+        ],
+        name: 'test-prompt',
       }
 
-      const result = z.object(schema).parse(minimalInput)
-      expect(result.arg1).to.equal('test')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const schema = (mcpCommand as any).buildPromptArgumentSchema(prompt)
+
+      const validInput = {priority: 'high', task: 'test task'}
+      const result = schema.parse(validInput)
+      expect(result).to.deep.equal(validInput)
+
+      // Test required validation
+      expect(() => schema.parse({priority: 'high'})).to.throw()
+    })
+
+    it('should use custom argumentSchema if provided', () => {
+      const customSchema = z.object({
+        customField: z.string(),
+        optionalField: z.number().optional(),
+      })
+
+      const prompt = {
+        argumentSchema: customSchema,
+        name: 'custom-prompt',
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (mcpCommand as any).buildPromptArgumentSchema(prompt)
+      expect(result).to.equal(customSchema)
+    })
+
+    it('should return empty object schema for prompts without arguments', () => {
+      const prompt = {name: 'simple-prompt'}
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const schema = (mcpCommand as any).buildPromptArgumentSchema(prompt)
+
+      const result = schema.parse({})
+      expect(result).to.deep.equal({})
+    })
+  })
+
+  describe('notification debouncing', () => {
+    let clock: sinon.SinonFakeTimers
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers()
+    })
+
+    afterEach(() => {
+      clock.restore()
+    })
+
+    it('should debounce multiple rapid resource list changes', async () => {
+      // Mock the server property
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(mcpCommand as any).server = mockServer
+
+      // Call notification multiple times rapidly
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const notifyMethod = (mcpCommand as any).notifyResourceListChanged.bind(mcpCommand)
+
+      notifyMethod('cmd1', 'test1')
+      notifyMethod('cmd2', 'test2')
+      notifyMethod('cmd3', 'test3')
+
+      // Should not have sent notification yet
+      expect(mockServer.notification.called).to.be.false
+
+      // Fast forward past debounce time
+      clock.tick(150)
+
+      // Should have sent only one notification
+      expect(mockServer.notification.calledOnce).to.be.true
     })
   })
 
@@ -370,13 +477,26 @@ describe('MCP Command', () => {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const {allPrompts} = mcpCommand as any
-      expect(allPrompts).to.have.length(1)
-      const [firstPrompt] = allPrompts
+      expect(allPrompts).to.have.length(2)
+      const [firstPrompt, secondPrompt] = allPrompts
       expect(firstPrompt).to.deep.include({
         arguments: [{description: 'Task to analyze', name: 'task', required: true}],
         description: 'Analyze a task',
         name: 'analyze-task',
       })
+      expect(secondPrompt).to.deep.include({
+        arguments: [{description: 'Optional context', name: 'context', required: false}],
+        description: 'Process with custom validation',
+        name: 'process-with-validation',
+      })
+      // Test that argumentSchema exists and works correctly (can't compare ZodObjects directly)
+      expect(secondPrompt).to.have.property('argumentSchema')
+      expect(secondPrompt.argumentSchema).to.be.an('object')
+
+      // Test schema functionality by parsing valid input
+      const validInput = {context: 'test context', priority: 'high'}
+      const result = secondPrompt.argumentSchema.parse(validInput)
+      expect(result).to.deep.equal(validInput)
     })
 
     it('should collect roots from command class', async () => {
@@ -581,6 +701,168 @@ describe('MCP Command', () => {
         // If there's an error, fail the test
         expect.fail(`Command should not throw error: ${error}`)
       }
+    })
+  })
+
+  describe('Dynamic Resources with Handler', () => {
+    it('should execute resource handler and return content', async () => {
+      const resource: ExtendedMcpResource = {
+        description: 'Test resource',
+        handler() {
+          return 'Handler result'
+        },
+        name: 'Test Resource',
+        uri: 'test://resource',
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const content = await (mcpCommand as any).getResourceContent(resource)
+      expect(content).to.equal('Handler result')
+    })
+
+    it('should handle async resource handlers', async () => {
+      const resource: ExtendedMcpResource = {
+        description: 'Async test resource',
+        async handler() {
+          return 'Async handler result'
+        },
+        name: 'Async Test Resource',
+        uri: 'test://async-resource',
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const content = await (mcpCommand as any).getResourceContent(resource)
+      expect(content).to.equal('Async handler result')
+    })
+
+    it('should handle string-based handler method calls', async () => {
+      const commandInstance = {
+        getResourceData() {
+          return 'Data from method handler'
+        },
+      }
+
+      const resource: ExtendedMcpResource = {
+        commandInstance,
+        description: 'Method handler resource',
+        handler: 'getResourceData',
+        name: 'Method Handler Resource',
+        uri: 'test://method-resource',
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const content = await (mcpCommand as any).getResourceContent(resource)
+      expect(content).to.equal('Data from method handler')
+    })
+
+    it('should throw error for missing handler method', async () => {
+      const resource: ExtendedMcpResource = {
+        description: 'Missing method resource',
+        handler: 'nonExistentMethod',
+        name: 'Missing Method Resource',
+        uri: 'test://missing-method',
+      }
+
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (mcpCommand as any).getResourceContent(resource)
+        expect.fail('Should have thrown error')
+      } catch (error: unknown) {
+        expect((error as Error).message).to.include('Failed to load resource Missing Method Resource')
+      }
+    })
+
+    it('should return static content when no handler is provided', async () => {
+      const resource: ExtendedMcpResource = {
+        content: 'Static content',
+        description: 'Static resource',
+        name: 'Static Resource',
+        uri: 'test://static',
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const content = await (mcpCommand as any).getResourceContent(resource)
+      expect(content).to.equal('Static content')
+    })
+
+    it('should return default content when no handler or content is provided', async () => {
+      const resource: ExtendedMcpResource = {
+        description: 'Default resource',
+        name: 'Default Resource',
+        uri: 'test://default',
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const content = await (mcpCommand as any).getResourceContent(resource)
+      expect(content).to.include('Resource: Default Resource')
+      expect(content).to.include('URI: test://default')
+    })
+  })
+
+  describe('URI Template Matching', () => {
+    it('should match URI templates and extract parameters', () => {
+      const template = 'files/{path}/content'
+      const uri = 'files/src/main.ts/content'
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const params = (mcpCommand as any).matchUriTemplate(uri, template)
+      expect(params).to.deep.equal({path: 'src/main.ts'})
+    })
+
+    it('should handle multiple parameters in template', () => {
+      const template = 'api/{version}/users/{userId}/profile'
+      const uri = 'api/v1/users/123/profile'
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const params = (mcpCommand as any).matchUriTemplate(uri, template)
+      expect(params).to.deep.equal({userId: '123', version: 'v1'})
+    })
+
+    it('should return null for non-matching URIs', () => {
+      const template = 'files/{path}/content'
+      const uri = 'different/structure'
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const params = (mcpCommand as any).matchUriTemplate(uri, template)
+      expect(params).to.be.null
+    })
+
+    it('should handle URL encoded parameters', () => {
+      const template = 'files/{path}'
+      const uri = 'files/src%2Fmain.ts'
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const params = (mcpCommand as any).matchUriTemplate(uri, template)
+      expect(params).to.deep.equal({path: 'src/main.ts'})
+    })
+  })
+
+  describe('URI Template Resolution', () => {
+    it('should resolve URI template with parameters', () => {
+      const template = 'files/{path}/content'
+      const params = {path: 'src/main.ts'}
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const resolved = (mcpCommand as any).resolveUriTemplate(template, params)
+      expect(resolved).to.equal('files/src%2Fmain.ts/content')
+    })
+
+    it('should handle multiple parameters', () => {
+      const template = 'api/{version}/users/{userId}'
+      const params = {userId: '123', version: 'v1'}
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const resolved = (mcpCommand as any).resolveUriTemplate(template, params)
+      expect(resolved).to.equal('api/v1/users/123')
+    })
+
+    it('should encode special characters in parameters', () => {
+      const template = 'files/{path}'
+      const params = {path: 'folder with spaces/file.txt'}
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const resolved = (mcpCommand as any).resolveUriTemplate(template, params)
+      expect(resolved).to.equal('files/folder%20with%20spaces%2Ffile.txt')
     })
   })
 })
