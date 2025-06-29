@@ -16,7 +16,7 @@ This plugin automatically converts your oclif CLI commands into a **fully MCP-co
 
 - ✅ **`resources/list`** endpoint for resource discovery
 - ✅ **`resources/read`** endpoint for on-demand content fetching
-- ✅ **ResourceTemplate** support for dynamic resources with parameters
+- ✅ **Static and dynamic resources** with handler support
 - ✅ **Proper content separation** following MCP best practices
 - ✅ **Type-safe resource handlers** with full metadata support
 
@@ -35,7 +35,6 @@ The **Model Context Protocol (MCP)** is an open standard that enables AI assista
 - **🔍 Auto-discovery**: Automatically discovers and exposes oclif commands as MCP tools
 - **📝 Schema Generation**: Converts oclif arguments and flags to Zod schemas for type-safe execution
 - **📊 MCP-Compliant Resources**: Full support for static and dynamic resources following MCP specification
-- **⚡ Resource Templates**: Support for parameterized resources with `{parameter}` syntax
 - **🎯 Prompt Templates**: Reusable prompt templates with argument validation and handlers
 - **🌳 Workspace Roots**: Automatic CLI working directory registration as MCP root
 - **🔄 Lazy Loading**: Resources are fetched on-demand through proper MCP endpoints
@@ -208,7 +207,17 @@ export default class StatusCommand extends Command {
 
 ### 📊 MCP-Compliant Resources
 
-Resources provide contextual data to AI assistants following the official MCP specification. Resources are automatically discoverable through the `resources/list` endpoint and fetched on-demand via `resources/read`.
+Resources provide contextual data to AI assistants following the [official MCP specification](https://modelcontextprotocol.io/docs/concepts/resources). Resources are automatically discoverable through the `resources/list` endpoint and fetched on-demand via `resources/read`. Our implementation includes **100% MCP compliance** with:
+
+- ✅ **Direct Resources** - Static resources with `uri`, `name`, `description`, `mimeType`, and `size` fields
+- ✅ **Resource Templates** - Dynamic resources using RFC 6570 URI templates with `uriTemplate` field
+- ✅ **URI Template Resolution** - Automatic parameter extraction and resolution (e.g., `users://profile/{userId}`)
+- ✅ **Binary Resources** - Support for both `text` and `blob` (base64) content types
+- ✅ **Multiple Resource Returns** - Single `resources/read` can return multiple resources
+- ✅ **Resource Subscriptions** - Full subscription tracking via `resources/subscribe`/`resources/unsubscribe`
+- ✅ **Real-time Notifications** - Actual `notifications/resources/updated` and `notifications/resources/list_changed`
+- ✅ **URI Generation** - Public API for programmatic URI creation from templates
+- ✅ **Server Capabilities** - Proper capabilities declaration with subscription support
 
 #### Static Resources
 
@@ -231,20 +240,56 @@ export default class ConfigCommand extends Command {
         2,
       ),
       mimeType: 'application/json',
+      size: 98, // Optional: size in bytes for better resource management
     },
   ]
 }
 ```
 
-#### Dynamic Resources with Parameters
+#### Resource Templates
 
-Use `{parameter}` syntax for parameterized resources:
+Use URI templates following RFC 6570 for dynamic resource patterns:
+
+```typescript
+export default class UserCommand extends Command {
+  static mcpResourceTemplates = [
+    {
+      uriTemplate: 'users://profile/{userId}',
+      name: 'User Profile Template',
+      description: 'Access user profiles by ID using users://profile/123',
+      mimeType: 'application/json',
+    },
+    {
+      uriTemplate: 'files://document/{docId}/content',
+      name: 'Document Content Template',
+      description: 'Access document content by ID using files://document/abc/content',
+      mimeType: 'text/plain',
+    },
+  ]
+
+  // Dynamic templates via methods
+  static async getMcpResourceTemplates() {
+    return [
+      {
+        uriTemplate: 'logs://{service}/recent',
+        name: 'Service Logs Template',
+        description: 'Access recent logs for any service using logs://api/recent',
+        mimeType: 'text/plain',
+      },
+    ]
+  }
+}
+```
+
+#### Dynamic Resources with Function Handlers
+
+Use function handlers for dynamic content generation:
 
 ```typescript
 export default class UserCommand extends Command {
   static mcpResources = [
     {
-      uri: 'users://{userId}/profile',
+      uri: 'users://profile-info',
       name: 'User Profile',
       description: 'User profile information',
       handler: 'getUserProfile', // Method name on class
@@ -252,11 +297,19 @@ export default class UserCommand extends Command {
     },
   ]
 
-  // Handler method receives parameters from URI
+  // Handler method generates dynamic content
   async getUserProfile() {
-    // Access to this.userId from URI parameter
-    const user = await this.fetchUser(this.userId)
+    const user = await this.fetchUserData()
     return JSON.stringify(user, null, 2)
+  }
+
+  private async fetchUserData() {
+    // Your logic to fetch user data
+    return {
+      id: '123',
+      name: 'John Doe',
+      email: 'john@example.com',
+    }
   }
 }
 ```
@@ -303,9 +356,9 @@ export default class LogsCommand extends Command {
   async getMcpResources() {
     return [
       {
-        uri: 'logs://recent/{count}',
+        uri: 'logs://recent-entries',
         name: 'Recent Logs',
-        description: 'Last N log entries',
+        description: 'Recent log entries',
         handler: () => this.getRecentLogs(),
         mimeType: 'text/plain',
       },
@@ -315,6 +368,11 @@ export default class LogsCommand extends Command {
   private async getRecentLogs() {
     // Access to command instance and configuration
     return await this.fetchLogs(this.config.logLevel)
+  }
+
+  private async fetchLogs(logLevel: string) {
+    // Your logic to fetch logs
+    return `Recent logs at ${logLevel} level:\n2024-01-01 10:00:00 INFO: Application started\n2024-01-01 10:01:00 DEBUG: Processing request`
   }
 }
 ```
@@ -352,6 +410,100 @@ export default class ExampleCommand extends Command {
     return 'Content from method'
   }
 }
+```
+
+#### Binary Resources and URI Templates
+
+Advanced resource patterns with full MCP compliance:
+
+```typescript
+export default class AdvancedCommand extends Command {
+  // Resource templates for dynamic URI resolution
+  static mcpResourceTemplates = [
+    {
+      uriTemplate: 'users://profile/{userId}',
+      name: 'User Profile Template',
+      description: 'Access user profiles by ID (e.g., users://profile/123)',
+      mimeType: 'application/json',
+    },
+    {
+      uriTemplate: 'files://{category}/{filename}',
+      name: 'File Template',
+      description: 'Access files by category (e.g., files://docs/readme.txt)',
+      mimeType: 'text/plain',
+    },
+  ]
+
+  // Binary resource example
+  static mcpResources = [
+    {
+      uri: 'images://screenshot',
+      name: 'Screenshot',
+      handler: 'captureScreen',
+      mimeType: 'image/png',
+      size: 1024000, // Estimated size in bytes
+    },
+  ]
+
+  async captureScreen() {
+    // Return Buffer for binary content (automatically base64 encoded)
+    return Buffer.from('fake-image-data', 'utf8')
+  }
+}
+
+// AI assistants can now access:
+// - users://profile/123 (resolves {userId} to "123")
+// - files://docs/readme.txt (resolves {category} to "docs", {filename} to "readme.txt")
+// - images://screenshot (returns base64 binary data)
+```
+
+#### Resource Notifications and URI Generation
+
+Advanced MCP resource management with real-time updates:
+
+```typescript
+export default class NotificationCommand extends Command {
+  static mcpResources = [
+    {
+      uri: 'data://live-metrics',
+      name: 'Live System Metrics',
+      handler: 'getLiveMetrics',
+      mimeType: 'application/json',
+    },
+  ]
+
+  static mcpResourceTemplates = [
+    {
+      uriTemplate: 'notifications://alert/{alertId}',
+      name: 'Alert Notification Template',
+      description: 'Real-time alerts by ID',
+      mimeType: 'application/json',
+    },
+  ]
+
+  async getLiveMetrics() {
+    // When this content changes, subscribers get notified
+    return JSON.stringify({
+      timestamp: new Date().toISOString(),
+      cpu: Math.random() * 100,
+      memory: Math.random() * 100,
+    })
+  }
+}
+
+// In your MCP server instance:
+const mcpServer = new Mcp([], config)
+
+// Generate URIs programmatically using templates
+const alertUri = mcpServer.generateResourceUri('Alert Notification Template', {
+  alertId: '12345',
+})
+// Returns: "notifications://alert/12345"
+
+// Subscribers automatically receive notifications when resources change
+// The server sends proper MCP notifications:
+// - notifications/resources/updated (for specific resource changes)
+// - notifications/resources/list_changed (when resource list changes)
 ```
 
 ### 🎯 MCP-Compliant Prompts
@@ -616,19 +768,25 @@ graph TB
 
 This plugin implements the full MCP specification:
 
-| MCP Feature            | Status      | Implementation                                  |
-| ---------------------- | ----------- | ----------------------------------------------- |
-| **Tools**              | ✅ Complete | All oclif commands auto-discovered as tools     |
-| **Tool Annotations**   | ✅ Complete | Support for readOnlyHint, destructiveHint, etc. |
-| **Resources**          | ✅ Complete | `resources/list` and `resources/read` endpoints |
-| **Static Resources**   | ✅ Complete | Direct URI registration                         |
-| **Dynamic Resources**  | ✅ Complete | ResourceTemplate with parameters                |
-| **Resource Templates** | ✅ Complete | `{parameter}` syntax support                    |
-| **Prompts**            | ✅ Complete | Reusable prompt templates with argument support |
-| **Roots**              | ✅ Complete | CLI workspace directory as MCP root             |
-| **Content Types**      | ✅ Complete | Proper MIME type handling                       |
-| **Error Handling**     | ✅ Complete | Graceful error responses                        |
-| **Schema Validation**  | ✅ Complete | Zod schema generation from oclif definitions    |
+| MCP Feature             | Status      | Implementation                                    |
+| ----------------------- | ----------- | ------------------------------------------------- |
+| **Tools**               | ✅ Complete | All oclif commands auto-discovered as tools       |
+| **Tool Annotations**    | ✅ Complete | Support for readOnlyHint, destructiveHint, etc.   |
+| **Resources**           | ✅ Complete | `resources/list` and `resources/read` endpoints   |
+| **Static Resources**    | ✅ Complete | Direct content and URI registration with size     |
+| **Dynamic Resources**   | ✅ Complete | Function and method handlers                      |
+| **Resource Templates**  | ✅ Complete | RFC 6570 URI templates with automatic resolution  |
+| **Binary Resources**    | ✅ Complete | Buffer support with base64 encoding               |
+| **URI Resolution**      | ✅ Complete | Parameter extraction from templated URIs          |
+| **Multiple Resources**  | ✅ Complete | Single read request can return multiple resources |
+| **Resource Updates**    | ✅ Complete | Real-time MCP notifications for resource changes  |
+| **URI Generation**      | ✅ Complete | Public API for programmatic URI template creation |
+| **Notification System** | ✅ Complete | Full MCP notification protocol implementation     |
+| **Prompts**             | ✅ Complete | Reusable prompt templates with argument support   |
+| **Roots**               | ✅ Complete | CLI workspace directory as MCP root               |
+| **Content Types**       | ✅ Complete | Proper MIME type handling                         |
+| **Error Handling**      | ✅ Complete | Graceful error responses                          |
+| **Schema Validation**   | ✅ Complete | Zod schema generation from oclif definitions      |
 
 ## 📋 Examples
 
@@ -659,7 +817,7 @@ sequenceDiagram
     CLI->>MCP: Return resource list
     MCP->>AI: Available resources
 
-    AI->>MCP: resources/read(users://123/profile)
+    AI->>MCP: resources/read(status://runtime)
     MCP->>CLI: Call resource handler
     CLI->>MCP: Generate content
     MCP->>AI: Resource content
