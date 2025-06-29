@@ -1,3 +1,9 @@
+# [0.4.0](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.3.1...0.4.0) (2025-06-29)
+
+### Features
+
+- add MCP tool annotations support ([5d740f3](https://github.com/npjonath/oclif-plugin-mcp-server/commit/5d740f3181a73c088eea695032b22c3ac8eaf5af))
+
 ## [0.3.1](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.3.0...0.3.1) (2025-06-29)
 
 ### Bug Fixes
