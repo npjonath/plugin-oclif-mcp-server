@@ -1,3 +1,9 @@
+## [0.5.1](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.5.0...0.5.1) (2025-07-01)
+
+### Bug Fixes
+
+- enhance MCP command filtering and notification handling ([0a53fda](https://github.com/npjonath/oclif-plugin-mcp-server/commit/0a53fdaec21eff07a571ba911edbe5eaeb7e4f90))
+
 # [0.5.0](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.4.0...0.5.0) (2025-06-29)
 
 ### Features
