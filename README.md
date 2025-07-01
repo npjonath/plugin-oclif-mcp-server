@@ -792,6 +792,7 @@ The MCP server automatically filters commands:
 
 - ✅ `hidden: false` - Command must not be hidden
 - ✅ `disableMCP: true` - Command must not disable MCP (default: false)
+- ✅ `cmdClass.pluginType === 'jit'` - JIT (Just-In-Time) commands are automatically excluded from MCP exposure for security and stability reasons.
 - ✅ Not the MCP command itself
 
 ## 🏗️ Architecture
