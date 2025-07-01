@@ -1,7 +1,7 @@
 {
   "name": "oclif-plugin-mcp-server",
   "description": "A plugin for the oclif CLI framework that automatically discovers commands and serves them through the Model Context Protocol (MCP).",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "author": "Jonathan Jot",
   "bugs": "https://github.com/npjonath/oclif-plugin-mcp-server/issues",
   "dependencies": {
