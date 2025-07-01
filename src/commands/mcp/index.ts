@@ -11,6 +11,9 @@ import {
   UnsubscribeRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
 import {Command, Flags, Interfaces} from '@oclif/core'
+import cors from 'cors'
+import express, {Express, Request, Response} from 'express'
+import {v4 as uuidv4} from 'uuid'
 import {z, ZodSchema, ZodType, ZodTypeAny} from 'zod'
 
 export interface McpResource {
@@ -123,6 +126,44 @@ export const MCP_ERROR_CODES = {
   TOOL_NOT_FOUND: -32_001,
 } as const
 
+// HTTP Transport interfaces
+export interface HttpSession {
+  createdAt: Date
+  eventId: number
+  // Add event log for resumability
+  eventLog: Array<{
+    data: unknown
+    id: number
+    timestamp: Date
+    type: string
+  }>
+  id: string
+  lastActivity: Date
+}
+
+export interface SseConnection {
+  response: Response
+  sessionId: string
+  // Add stream ID for tracking
+  streamId: string
+  subscriptions: Set<string>
+}
+
+export type TransportType = 'http' | 'stdio'
+
+export interface JSONRPCMessage {
+  error?: {
+    code: number
+    data?: unknown
+    message: string
+  }
+  id?: number | string
+  jsonrpc: '2.0'
+  method?: string
+  params?: unknown
+  result?: unknown
+}
+
 export default class Mcp extends Command {
   static override description = 'Start MCP (Model Context Protocol) server for AI assistant integration'
   static override examples = [
@@ -138,6 +179,11 @@ export default class Mcp extends Command {
       description: 'Comma-separated patterns to exclude (e.g., "*:debug,test:*,internal:*")',
       helpValue: '*:debug,test:*',
     }),
+    host: Flags.string({
+      default: '127.0.0.1',
+      description: 'Host to bind HTTP server to (HTTP transport only)',
+      helpValue: '127.0.0.1',
+    }),
     'include-topics': Flags.string({
       description: 'Comma-separated topics to include (e.g., "auth,deploy,config")',
       helpValue: 'auth,deploy',
@@ -145,6 +191,11 @@ export default class Mcp extends Command {
     'max-tools': Flags.integer({
       description: 'Maximum number of tools to expose (overrides config)',
       helpValue: '40',
+    }),
+    port: Flags.integer({
+      default: 3000,
+      description: 'Port for HTTP server (HTTP transport only)',
+      helpValue: '3000',
     }),
     profile: Flags.string({
       description: 'Configuration profile to use',
@@ -158,6 +209,12 @@ export default class Mcp extends Command {
       helpValue: 'prioritize',
       options: ['first', 'prioritize', 'balanced', 'strict'],
     }),
+    transport: Flags.string({
+      default: 'stdio',
+      description: 'Transport protocol to use',
+      helpValue: 'stdio',
+      options: ['stdio', 'http'],
+    }),
   }
   static override hidden = false
   private allPrompts: McpPrompt[] = []
@@ -166,6 +223,9 @@ export default class Mcp extends Command {
   private allRoots: McpRoot[] = []
   private excludedCommands: Command.Loadable[] = []
   private filteredCommands: Command.Loadable[] = []
+  // HTTP transport properties
+  private httpApp?: Express
+  private httpSessions = new Map<string, HttpSession>()
   // Configuration and filtering
   private mcpConfig!: McpConfig
   // Add debouncing for notifications
@@ -173,6 +233,7 @@ export default class Mcp extends Command {
   private pendingNotifications = new Set<string>()
   private resourceSubscriptions = new Set<string>()
   private server!: Server
+  private sseConnections = new Map<string, SseConnection>()
 
   /**
    * Generate a resource URI using a template and parameters
@@ -233,13 +294,30 @@ export default class Mcp extends Command {
     // Register MCP protocol handlers following official specification
     await this.registerMcpHandlers()
 
-    await this.server.connect(new StdioServerTransport())
-
-    // Notify clients that resource list is available (after server is connected)
-    // Skip notifications in test environment to prevent connection errors
+    // Skip flag parsing in test environment
     const isTestEnv =
       process.env.NODE_ENV === 'test' ||
       (typeof globalThis !== 'undefined' && 'describe' in globalThis && 'it' in globalThis)
+
+    const flags = isTestEnv ? {transport: 'stdio' as TransportType} : (await this.parse(Mcp)).flags
+
+    const transportType = flags.transport as TransportType
+
+    // Initialize transport based on selected type
+    await (transportType === 'http' ? this.initializeHttpTransport() : this.initializeStdioTransport())
+
+    // Start periodic cleanup for HTTP transport
+    if (transportType === 'http') {
+      setInterval(
+        () => {
+          this.cleanupEventLogs()
+          this.cleanupIdleSessions()
+        },
+        5 * 60 * 1000,
+      ) // Cleanup every 5 minutes
+    }
+
+    // Notify clients that resource list is available (after server is connected)
     if ((this.allResources.length > 0 || this.allResourceTemplates.length > 0) && !isTestEnv) {
       setTimeout(() => {
         this.sendResourceListChangedNotification().catch((error) => {
@@ -249,7 +327,7 @@ export default class Mcp extends Command {
     }
 
     // Log to stderr to avoid interfering with MCP JSON-RPC protocol on stdout
-    console.error(`🔌 MCP server for "${this.config.name}" ready`)
+    console.error(`🔌 MCP server for "${this.config.name}" ready (${transportType} transport)`)
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -399,6 +477,41 @@ export default class Mcp extends Command {
     }
 
     return z.object(schema)
+  }
+
+  /**
+   * Clean up old events from session event logs to prevent memory leaks
+   */
+  private cleanupEventLogs(): void {
+    const maxEvents = 100 // Keep last 100 events per session
+    const maxAge = 60 * 60 * 1000 // Keep events for 1 hour
+    const now = Date.now()
+
+    for (const session of this.httpSessions.values()) {
+      // Remove old events
+      session.eventLog = session.eventLog.filter((event) => now - event.timestamp.getTime() < maxAge)
+
+      // Keep only the most recent events
+      if (session.eventLog.length > maxEvents) {
+        session.eventLog = session.eventLog.slice(-maxEvents)
+      }
+    }
+  }
+
+  /**
+   * Clean up idle sessions to prevent memory leaks
+   */
+  private cleanupIdleSessions(): void {
+    const maxIdleTime = 30 * 60 * 1000 // 30 minutes
+    const now = Date.now()
+
+    for (const [sessionId, session] of this.httpSessions.entries()) {
+      if (now - session.lastActivity.getTime() > maxIdleTime) {
+        this.httpSessions.delete(sessionId)
+        this.sseConnections.delete(sessionId)
+        console.error(`Cleaned up idle session: ${sessionId}`)
+      }
+    }
   }
 
   /**
@@ -722,6 +835,370 @@ export default class Mcp extends Command {
   }
 
   /**
+   * Handle HTTP POST requests for JSON-RPC communication
+   */
+  private async handleHttpRequest(req: Request, res: Response): Promise<void> {
+    try {
+      // Validate MCP Protocol Version header
+      const protocolVersion = req.headers['mcp-protocol-version'] as string
+      if (!protocolVersion) {
+        // Default to 2025-03-26 for backwards compatibility
+        console.warn('Missing MCP-Protocol-Version header, assuming 2025-03-26')
+      } else if (!['2025-03-26', '2025-06-18'].includes(protocolVersion)) {
+        res.status(400).json({
+          error: 'Invalid or unsupported MCP-Protocol-Version',
+        })
+        return
+      }
+
+      // Validate Origin header for security (DNS rebinding protection)
+      const origin = req.headers.origin as string
+      if (origin && !this.isValidOrigin(origin)) {
+        res.status(403).json({
+          error: 'Origin not allowed',
+        })
+        return
+      }
+
+      // Validate Accept header
+      const acceptHeader = req.headers.accept || ''
+      if (!acceptHeader.includes('application/json') && !acceptHeader.includes('text/event-stream')) {
+        res.status(406).json({
+          error: 'Must accept application/json or text/event-stream',
+        })
+        return
+      }
+
+      const sessionId = req.headers['mcp-session-id'] as string
+      const jsonRpcMessage = req.body as JSONRPCMessage
+
+      // Validate JSON-RPC format
+      if (!jsonRpcMessage || jsonRpcMessage.jsonrpc !== '2.0') {
+        res.status(400).json({
+          error: {
+            code: MCP_ERROR_CODES.PARSE_ERROR,
+            message: 'Invalid JSON-RPC format',
+          },
+          id: jsonRpcMessage?.id || null,
+          jsonrpc: '2.0',
+        })
+        return
+      }
+
+      // Handle session management for initialize request
+      if (jsonRpcMessage.method === 'initialize') {
+        const newSessionId = sessionId || uuidv4()
+
+        if (!this.httpSessions.has(newSessionId)) {
+          this.httpSessions.set(newSessionId, {
+            createdAt: new Date(),
+            eventId: 0,
+            eventLog: [],
+            id: newSessionId,
+            lastActivity: new Date(),
+          })
+        }
+
+        res.setHeader('Mcp-Session-Id', newSessionId)
+      } else if (sessionId) {
+        // Validate session exists
+        const session = this.httpSessions.get(sessionId)
+        if (!session) {
+          res.status(404).json({
+            error: 'Session not found',
+          })
+          return
+        }
+
+        // Update session activity
+        session.lastActivity = new Date()
+      } else {
+        // Require session ID for non-initialize requests
+        res.status(400).json({
+          error: 'Mcp-Session-Id header required',
+        })
+        return
+      }
+
+      // Handle different message types according to MCP spec
+      if (!jsonRpcMessage.method && jsonRpcMessage.result !== undefined) {
+        // This is a JSON-RPC response
+        res.status(202).send() // 202 Accepted with no body
+        return
+      }
+
+      if (!jsonRpcMessage.method && !jsonRpcMessage.id) {
+        // This is a JSON-RPC notification
+        res.status(202).send() // 202 Accepted with no body
+        return
+      }
+
+      if (jsonRpcMessage.method && !jsonRpcMessage.id) {
+        // This is a JSON-RPC notification with method but no id
+        res.status(202).send() // 202 Accepted with no body
+        return
+      }
+
+      if (!jsonRpcMessage.method) {
+        res.status(400).json({
+          error: {
+            code: MCP_ERROR_CODES.METHOD_NOT_FOUND,
+            message: 'Method not specified',
+          },
+          id: jsonRpcMessage.id,
+          jsonrpc: '2.0',
+        })
+        return
+      }
+
+      // Handle the JSON-RPC request using the existing server
+      const response = await this.processJsonRpcRequest(jsonRpcMessage)
+
+      // Check if client supports SSE and if we should use it
+      const supportsSSE = acceptHeader.includes('text/event-stream')
+
+      if (supportsSSE && this.shouldUseSSE(jsonRpcMessage, response)) {
+        // Send SSE stream response
+        res.setHeader('Content-Type', 'text/event-stream')
+        res.setHeader('Cache-Control', 'no-cache')
+        res.setHeader('Connection', 'keep-alive')
+        res.setHeader('Access-Control-Allow-Origin', origin || '*')
+
+        // Send initial response with event ID
+        const session = this.httpSessions.get(sessionId!)!
+        session.eventId++
+        this.sendSSEEvent(res, 'message', response, session.eventId)
+
+        // Store event in log for potential replay
+        session.eventLog.push({
+          data: response,
+          id: session.eventId,
+          timestamp: new Date(),
+          type: 'message',
+        })
+
+        // Keep connection open for potential additional messages
+        req.on('close', () => {
+          res.end()
+        })
+      } else {
+        // Send single JSON response
+        res.setHeader('Content-Type', 'application/json')
+        res.json(response)
+      }
+    } catch (error) {
+      console.error('HTTP request error:', error)
+      res.status(500).json({
+        error: {
+          code: -32_000,
+          message: 'Internal server error',
+        },
+        id: null,
+        jsonrpc: '2.0',
+      })
+    }
+  }
+
+  /**
+   * Handle session termination
+   */
+  private handleSessionTermination(req: Request, res: Response): void {
+    const sessionId = req.headers['mcp-session-id'] as string
+
+    if (!sessionId) {
+      res.status(400).json({error: 'Mcp-Session-Id header required'})
+      return
+    }
+
+    const session = this.httpSessions.get(sessionId)
+    if (!session) {
+      res.status(404).json({error: 'Session not found'})
+      return
+    }
+
+    // Clean up session
+    this.httpSessions.delete(sessionId)
+    this.sseConnections.delete(sessionId)
+
+    res.json({message: 'Session terminated'})
+  }
+
+  /**
+   * Handle SSE connections for server-to-client communication
+   */
+  private handleSseConnection(req: Request, res: Response): void {
+    // Validate Accept header
+    const acceptHeader = req.headers.accept || ''
+    if (!acceptHeader.includes('text/event-stream')) {
+      res.status(405).json({
+        error: 'Method Not Allowed - must accept text/event-stream',
+      })
+      return
+    }
+
+    // Validate Origin header for security
+    const origin = req.headers.origin as string
+    if (origin && !this.isValidOrigin(origin)) {
+      res.status(403).json({
+        error: 'Origin not allowed',
+      })
+      return
+    }
+
+    const sessionId = req.headers['mcp-session-id'] as string
+
+    if (!sessionId) {
+      res.status(400).json({error: 'Mcp-Session-Id header required for SSE connections'})
+      return
+    }
+
+    const session = this.httpSessions.get(sessionId)
+    if (!session) {
+      res.status(404).json({error: 'Session not found'})
+      return
+    }
+
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('Access-Control-Allow-Origin', origin || '*')
+
+    // Store SSE connection
+    const connection: SseConnection = {
+      response: res,
+      sessionId,
+      streamId: uuidv4(),
+      subscriptions: new Set(),
+    }
+
+    this.sseConnections.set(sessionId, connection)
+
+    // Handle resumption from last event ID
+    const lastEventId = req.headers['last-event-id'] as string
+    if (lastEventId) {
+      const lastEventIdNum = Number.parseInt(lastEventId, 10)
+      if (!Number.isNaN(lastEventIdNum) && session.eventId > lastEventIdNum) {
+        // Replay missed events from this session's event log
+        const missedEvents = session.eventLog.filter((event) => event.id > lastEventIdNum)
+        for (const event of missedEvents) {
+          this.sendSSEEvent(res, event.type, event.data, event.id)
+        }
+
+        console.error(`Replayed ${missedEvents.length} events from event ID ${lastEventId}`)
+      }
+    }
+
+    // Send initial ping
+    session.eventId++
+    this.sendSSEEvent(res, 'ping', {timestamp: new Date().toISOString()}, session.eventId)
+
+    // Store ping event
+    session.eventLog.push({
+      data: {timestamp: new Date().toISOString()},
+      id: session.eventId,
+      timestamp: new Date(),
+      type: 'ping',
+    })
+
+    // Handle client disconnect
+    req.on('close', () => {
+      this.sseConnections.delete(sessionId)
+      res.end()
+    })
+  }
+
+  /**
+   * Initialize HTTP transport with Express server
+   */
+  private async initializeHttpTransport(): Promise<void> {
+    const {host, port} = (await this.parse(Mcp)).flags
+
+    this.httpApp = express()
+
+    // Configure CORS middleware with security best practices
+    this.httpApp.use(
+      cors({
+        allowedHeaders: ['Content-Type', 'Accept', 'Mcp-Session-Id', 'Last-Event-ID', 'MCP-Protocol-Version'],
+        credentials: true,
+        methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+        origin: (origin, callback) => {
+          // Allow requests without origin (e.g., mobile apps, Postman)
+          if (!origin) return callback(null, true)
+
+          // Validate origin for security
+          if (this.isValidOrigin(origin)) {
+            callback(null, true)
+          } else {
+            callback(new Error('Origin not allowed by CORS'))
+          }
+        },
+      }),
+    )
+
+    this.httpApp.use(express.json({limit: '10mb'}))
+
+    // MCP endpoint for POST requests (client-to-server communication)
+    this.httpApp.post('/mcp', async (req: Request, res: Response) => {
+      await this.handleHttpRequest(req, res)
+    })
+
+    // MCP endpoint for GET requests (SSE streams for server-to-client communication)
+    this.httpApp.get('/mcp', (req: Request, res: Response) => {
+      this.handleSseConnection(req, res)
+    })
+
+    // Session management endpoint
+    this.httpApp.delete('/mcp', (req: Request, res: Response) => {
+      this.handleSessionTermination(req, res)
+    })
+
+    // Health check endpoint
+    this.httpApp.get('/health', (req: Request, res: Response) => {
+      res.json({
+        activeConnections: this.sseConnections.size,
+        activeSessions: this.httpSessions.size,
+        status: 'ok',
+        transport: 'http',
+      })
+    })
+
+    // Start HTTP server
+    return new Promise((resolve, reject) => {
+      const server = this.httpApp!.listen(port, host, () => {
+        console.error(`🌐 HTTP server listening on http://${host}:${port}/mcp`)
+        resolve()
+      })
+
+      server.on('error', (error) => {
+        reject(error)
+      })
+    })
+  }
+
+  /**
+   * Initialize stdio transport
+   */
+  private async initializeStdioTransport(): Promise<void> {
+    await this.server.connect(new StdioServerTransport())
+  }
+
+  /**
+   * Validate origin for security (DNS rebinding protection)
+   */
+  private isValidOrigin(origin: string): boolean {
+    // Allow localhost and local development origins
+    const validOrigins = ['http://localhost', 'https://localhost', 'http://127.0.0.1', 'https://127.0.0.1']
+
+    // Check for exact matches or localhost with any port
+    return (
+      validOrigins.some((validOrigin) => origin.startsWith(validOrigin)) ||
+      /^https?:\/\/localhost:\d+$/.test(origin) ||
+      /^https?:\/\/127\.0\.0\.1:\d+$/.test(origin)
+    )
+  }
+
+  /**
    * Check if a command matches any of the patterns
    */
   private matchesPatterns(commandId: string, patterns: string[]): boolean {
@@ -878,6 +1355,60 @@ export default class Mcp extends Command {
     }
 
     return config
+  }
+
+  /**
+   * Process JSON-RPC request using the existing MCP server handlers
+   */
+  private async processJsonRpcRequest(message: JSONRPCMessage): Promise<JSONRPCMessage> {
+    try {
+      // Handle JSON-RPC requests by calling the appropriate handler directly
+      // This mimics what the server would do internally
+
+      if (!message.method) {
+        return {
+          error: {
+            code: MCP_ERROR_CODES.METHOD_NOT_FOUND,
+            message: 'Method not specified',
+          },
+          id: message.id,
+          jsonrpc: '2.0',
+        }
+      }
+
+      // Call the server's request handlers directly based on method
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const handlers = (this.server as any)._requestHandlers
+      const handler = handlers?.get(message.method)
+
+      if (!handler) {
+        return {
+          error: {
+            code: MCP_ERROR_CODES.METHOD_NOT_FOUND,
+            message: `Method not found: ${message.method}`,
+          },
+          id: message.id,
+          jsonrpc: '2.0',
+        }
+      }
+
+      const result = await handler(message)
+
+      return {
+        id: message.id,
+        jsonrpc: '2.0',
+        result,
+      }
+    } catch (error) {
+      return {
+        error: {
+          code: -32_603,
+          message: error instanceof Error ? error.message : 'Unknown error',
+        },
+        id: message.id,
+        jsonrpc: '2.0',
+      }
+    }
   }
 
   /**
@@ -1269,6 +1800,27 @@ export default class Mcp extends Command {
       })
       console.error(`Sent resource update notification: ${uri}`)
     }
+  }
+
+  /**
+   * Send SSE event to client
+   */
+  private sendSSEEvent(res: Response, event: string, data: unknown, eventId: number): void {
+    res.write(`id: ${eventId}\n`)
+    res.write(`event: ${event}\n`)
+    res.write(`data: ${JSON.stringify(data)}\n\n`)
+  }
+
+  /**
+   * Determine if SSE should be used for response
+   */
+  private shouldUseSSE(request: JSONRPCMessage, response: JSONRPCMessage): boolean {
+    // Use SSE for subscription-related responses or when explicitly requested
+    return (
+      request.method === 'resources/subscribe' ||
+      request.method === 'resources/list' ||
+      Boolean(response.result && Array.isArray((response.result as Record<string, unknown>).contents))
+    )
   }
 
   /**

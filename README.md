@@ -104,12 +104,27 @@ Add your CLI to your AI assistant's MCP configuration:
 2. Generate manifest: `npx oclif manifest`
 3. Update your MCP configuration:
 
+**Stdio Transport (default):**
+
 ```json
 {
   "mcpServers": {
     "your-cli-dev": {
       "command": "node <path_to_project_folder>/bin/dev.js",
       "args": ["mcp"]
+    }
+  }
+}
+```
+
+**HTTP Transport:**
+
+```json
+{
+  "mcpServers": {
+    "your-cli-dev-http": {
+      "command": "node <path_to_project_folder>/bin/dev.js",
+      "args": ["mcp", "--transport", "http", "--port", "3000"]
     }
   }
 }
@@ -130,6 +145,107 @@ Your AI assistant can now discover and use your CLI commands and resources:
    📊 Deployment completed successfully!
    🔍 Logs: [deployment details...]
 ```
+
+## 🌐 Transport Protocols
+
+This plugin supports both MCP transport protocols as defined in the [official specification](https://modelcontextprotocol.io/docs/concepts/transports):
+
+### 📡 Standard Input/Output (stdio) - Default
+
+The default transport for local integrations and command-line tools.
+
+```bash
+# Start MCP server with stdio transport (default)
+your-cli mcp
+your-cli mcp --transport stdio
+```
+
+**Perfect for:**
+
+- Local integrations (Claude Desktop, Cursor)
+- Command-line tools
+- Simple process communication
+- Shell scripts
+
+### 🌐 Streamable HTTP Transport
+
+HTTP-based transport with Server-Sent Events (SSE) for web integrations.
+
+```bash
+# Start MCP server with HTTP transport
+your-cli mcp --transport http --port 3000 --host 127.0.0.1
+```
+
+**Perfect for:**
+
+- Web-based integrations
+- Client-server communication over HTTP
+- Stateful sessions
+- Multiple concurrent clients
+- Resumable connections
+- Docker containers
+
+#### HTTP Transport Features
+
+- **JSON-RPC over HTTP**: Client-to-server communication via POST requests
+- **Server-Sent Events (SSE)**: Server-to-client communication via GET requests
+- **Session Management**: Stateful sessions with `Mcp-Session-Id` headers
+- **Resumability**: Event IDs and `Last-Event-ID` header support
+- **CORS Support**: Configurable cross-origin resource sharing
+- **Health Check**: `/health` endpoint for monitoring
+
+#### HTTP Endpoints
+
+- `POST /mcp` - JSON-RPC requests (client-to-server)
+- `GET /mcp` - SSE streams (server-to-client)
+- `DELETE /mcp` - Session termination
+- `GET /health` - Health check
+
+#### HTTP Transport Examples
+
+```bash
+# List available tools
+curl -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+
+# Call a tool
+curl -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"your-command","arguments":{"arg":"value"}},"id":2}'
+
+# Subscribe to SSE stream
+curl -N http://localhost:3000/mcp \
+  -H "Accept: text/event-stream" \
+  -H "Mcp-Session-Id: your-session-id"
+```
+
+#### Web Client Integration
+
+```javascript
+// Initialize HTTP MCP client
+const client = new MCPClient({
+  transport: 'http',
+  endpoint: 'http://localhost:3000/mcp',
+})
+
+await client.connect()
+const tools = await client.listTools()
+```
+
+### Transport Selection Guide
+
+| Use Case              | Recommended Transport | Reason                                        |
+| --------------------- | --------------------- | --------------------------------------------- |
+| Local CLI integration | `stdio`               | Simple, direct process communication          |
+| VS Code extensions    | `stdio`               | Standard for desktop integrations             |
+| Claude Desktop        | `stdio`               | Standard for desktop integrations             |
+| Cursor IDE            | `stdio`               | Standard for desktop integrations             |
+| Web applications      | `http`                | Works over network, supports multiple clients |
+| Docker containers     | `http`                | Better for containerized deployments          |
+| Development/debugging | `http`                | Easy to test with curl/browser                |
+| Production servers    | `http`                | Scalable, supports load balancing             |
+| CI/CD pipelines       | `http`                | Better for automated environments             |
 
 ## 🔒 Security Considerations
 
