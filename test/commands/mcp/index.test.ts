@@ -250,6 +250,54 @@ describe('MCP Command', () => {
       const schema = (mcpCommand as any).buildInputSchema({args: {}, flags: {}})
       expect(Object.keys(schema)).to.have.length(0)
     })
+
+    it('should correctly identify required vs optional fields in schema', () => {
+      // Create a test command with mix of required and optional fields
+      const testCommand = {
+        args: {
+          optionalArg: {name: 'optionalArg', required: false},
+          requiredArg: {name: 'requiredArg', required: true},
+        },
+        flags: {
+          optionalFlag: {required: false, type: 'option'},
+          requiredFlag: {required: true, type: 'option'},
+        },
+        id: 'test:schema',
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const schema = (mcpCommand as any).buildInputSchema(testCommand)
+
+      // Test that required fields are not optional Zod schemas
+      expect(schema.requiredArg).to.not.be.instanceOf(z.ZodOptional)
+      expect(schema.requiredFlag).to.not.be.instanceOf(z.ZodOptional)
+
+      // Test that optional fields are optional Zod schemas
+      expect(schema.optionalArg).to.be.instanceOf(z.ZodOptional)
+      expect(schema.optionalFlag).to.be.instanceOf(z.ZodOptional)
+
+      // Test the full schema validation
+      const inputSchema = z.object(schema)
+
+      // Required fields must be present
+      expect(() => inputSchema.parse({})).to.throw()
+      expect(() => inputSchema.parse({requiredArg: 'test'})).to.throw() // missing requiredFlag
+
+      // Valid input with all required fields
+      const validInput = {requiredArg: 'test', requiredFlag: 'flag-value'}
+      const result = inputSchema.parse(validInput)
+      expect(result).to.deep.equal(validInput)
+
+      // Valid input with optional fields too
+      const validInputWithOptional = {
+        optionalArg: 'optional-test',
+        optionalFlag: 'optional-flag',
+        requiredArg: 'test',
+        requiredFlag: 'flag-value',
+      }
+      const resultWithOptional = inputSchema.parse(validInputWithOptional)
+      expect(resultWithOptional).to.deep.equal(validInputWithOptional)
+    })
   })
 
   describe('buildPromptArgumentSchema', () => {
@@ -937,6 +985,295 @@ describe('MCP Command', () => {
       expect(processedCommands).to.not.include('hidden:command')
       expect(processedCommands).to.not.include('disabled:command')
       expect(processedCommands).to.not.include('mcp')
+    })
+  })
+
+  describe('Configuration and Filtering', () => {
+    it('should parse configuration from package.json', async () => {
+      const testConfig = {
+        commands: testCommands,
+        name: 'test-cli',
+        pjson: {
+          oclif: {
+            mcp: {
+              commands: {
+                exclude: ['*:debug'],
+                include: ['auth:*', 'deploy:*'],
+                priority: ['auth:login', 'deploy:production'],
+              },
+              defaultProfile: 'minimal',
+              profiles: {
+                minimal: {
+                  maxTools: 20,
+                  topics: {include: ['auth']},
+                },
+              },
+              toolLimits: {
+                maxTools: 50,
+                strategy: 'balanced',
+                warnThreshold: 40,
+              },
+              topics: {
+                exclude: ['debug'],
+                include: ['auth', 'deploy'],
+              },
+            },
+          },
+        },
+        version: '1.0.0',
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mcpCommand = new McpCommand([], testConfig as any)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const config = await (mcpCommand as any).parseMcpConfig()
+
+      expect(config.toolLimits.maxTools).to.equal(20) // Should use minimal profile
+      expect(config.topics.include).to.deep.equal(['auth'])
+    })
+
+    it('should match command patterns correctly', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mcpCommand = new McpCommand([], mockConfig as any)
+
+      // Test wildcard patterns
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((mcpCommand as any).matchesPatterns('auth:login', ['auth:*'])).to.be.true
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((mcpCommand as any).matchesPatterns('deploy:production', ['auth:*'])).to.be.false
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((mcpCommand as any).matchesPatterns('any:command', ['*'])).to.be.true
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((mcpCommand as any).matchesPatterns('test:debug', ['*:debug'])).to.be.true
+
+      // Test exact matches
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((mcpCommand as any).matchesPatterns('exact:match', ['exact:match'])).to.be.true
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((mcpCommand as any).matchesPatterns('exact:match', ['different:command'])).to.be.false
+    })
+
+    it('should match command topics correctly', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mcpCommand = new McpCommand([], mockConfig as any)
+
+      // Test topic matching
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((mcpCommand as any).matchesTopics('auth:login', ['auth'])).to.be.true
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((mcpCommand as any).matchesTopics('deploy:production', ['auth'])).to.be.false
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((mcpCommand as any).matchesTopics('any:command', ['*'])).to.be.true
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      expect((mcpCommand as any).matchesTopics('auth:login', ['auth', 'deploy'])).to.be.true
+    })
+
+    it('should filter commands based on configuration', () => {
+      const commands = [
+        {disableMCP: false, hidden: false, id: 'auth:login'},
+        {disableMCP: false, hidden: false, id: 'auth:logout'},
+        {disableMCP: false, hidden: false, id: 'deploy:staging'},
+        {disableMCP: false, hidden: false, id: 'deploy:production'},
+        {disableMCP: false, hidden: false, id: 'debug:trace'},
+        {disableMCP: false, hidden: false, id: 'internal:config'},
+        {disableMCP: false, hidden: true, id: 'hidden:command'},
+        {disableMCP: true, hidden: false, id: 'disabled:command'},
+        {disableMCP: false, hidden: false, id: 'jit:command', pluginType: 'jit'},
+      ]
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mcpCommand = new McpCommand([], {commands} as any)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(mcpCommand as any).mcpConfig = {
+        commands: {priority: ['deploy:production', 'auth:login']},
+        toolLimits: {maxTools: 4, strategy: 'prioritize'},
+        topics: {exclude: ['debug'], include: ['auth', 'deploy']},
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (mcpCommand as any).filterCommands(commands)
+
+      expect(result.filtered).to.have.length(4) // Should be limited to maxTools
+      expect(result.excluded).to.have.length(5) // hidden, disabled, jit, debug, internal
+
+      // Priority commands should be included first
+      const filteredIds = result.filtered.map((cmd: {id: string}) => cmd.id)
+      expect(filteredIds).to.include('deploy:production')
+      expect(filteredIds).to.include('auth:login')
+      expect(filteredIds).to.not.include('debug:trace') // Excluded by topic
+      expect(filteredIds).to.not.include('hidden:command') // Hidden
+      expect(filteredIds).to.not.include('jit:command') // JIT
+    })
+
+    it('should handle different filtering strategies', () => {
+      const commands = Array.from({length: 10}, (_, i) => ({
+        disableMCP: false,
+        hidden: false,
+        id: `cmd${i}:action`,
+      }))
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mcpCommand = new McpCommand([], {commands} as any)
+
+      // Test 'first' strategy
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(mcpCommand as any).mcpConfig = {toolLimits: {maxTools: 3, strategy: 'first'}}
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = (mcpCommand as any).filterCommands(commands)
+      expect(result.filtered).to.have.length(3)
+      expect(result.filtered[0].id).to.equal('cmd0:action')
+
+      // Test 'strict' strategy (should throw)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(mcpCommand as any).mcpConfig = {toolLimits: {maxTools: 3, strategy: 'strict'}}
+      expect(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(mcpCommand as any).filterCommands(commands)
+      }).to.throw('Command count (10) exceeds tool limit (3)')
+    })
+  })
+
+  describe('Advanced Protocol Handlers', () => {
+    beforeEach(() => {
+      Object.defineProperty(mcpCommand, 'server', {
+        value: mockServer,
+        writable: true,
+      })
+    })
+
+    it('should handle tools/call with validation errors', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (mcpCommand as any).registerMcpHandlers()
+
+      const toolsCallHandler = mockHandlers.get('tools/call')
+      expect(toolsCallHandler).to.be.a('function')
+
+      try {
+        await toolsCallHandler({
+          params: {
+            arguments: {invalidArg: 'value'}, // Invalid argument
+            name: 'test-command',
+          },
+        })
+        expect.fail('Should have thrown validation error')
+      } catch (error) {
+        expect(error).to.be.an('error')
+        expect((error as Error & {code?: number}).code).to.equal(MCP_ERROR_CODES.INVALID_PARAMS)
+      }
+    })
+
+    it('should handle tools/call for non-existent tool', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (mcpCommand as any).registerMcpHandlers()
+
+      const toolsCallHandler = mockHandlers.get('tools/call')
+
+      try {
+        await toolsCallHandler({
+          params: {
+            arguments: {},
+            name: 'non-existent-tool',
+          },
+        })
+        expect.fail('Should have thrown tool not found error')
+      } catch (error) {
+        expect(error).to.be.an('error')
+        expect((error as Error & {code?: number}).code).to.equal(MCP_ERROR_CODES.TOOL_NOT_FOUND)
+      }
+    })
+
+    it('should handle prompts/get for non-existent prompt', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (mcpCommand as any).registerMcpHandlers()
+
+      const promptsGetHandler = mockHandlers.get('prompts/get')
+
+      try {
+        await promptsGetHandler({
+          params: {
+            arguments: {},
+            name: 'non-existent-prompt',
+          },
+        })
+        expect.fail('Should have thrown prompt not found error')
+      } catch (error) {
+        expect(error).to.be.an('error')
+        expect((error as Error & {code?: number}).code).to.equal(MCP_ERROR_CODES.PROMPT_NOT_FOUND)
+      }
+    })
+
+    it('should include tool annotations in tools/list', async () => {
+      const commandWithAnnotations = testCommands.find((cmd) => cmd.id === 'test:annotations')!
+      const configWithAnnotations = {
+        ...mockConfig,
+        commands: [commandWithAnnotations],
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const mcpCommand = new McpCommand([], configWithAnnotations as any)
+      Object.defineProperty(mcpCommand, 'server', {value: mockServer, writable: true})
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (mcpCommand as any).registerMcpHandlers()
+
+      const toolsListHandler = mockHandlers.get('tools/list')
+      const result = await toolsListHandler()
+
+      const tool = result.tools[0]
+      expect(tool).to.have.property('destructiveHint', true)
+      expect(tool).to.have.property('idempotentHint', false)
+      expect(tool).to.have.property('openWorldHint', true)
+      expect(tool).to.have.property('readOnlyHint', false)
+    })
+  })
+
+  describe('Binary Resources and Advanced Features', () => {
+    it('should handle binary resource content', async () => {
+      const binaryData = Buffer.from('binary content data', 'utf8')
+      const resource = {
+        handler: () => binaryData,
+        mimeType: 'application/octet-stream',
+        name: 'Binary Resource',
+        uri: 'binary://test',
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(mcpCommand as any).allResources = [resource]
+
+      Object.defineProperty(mcpCommand, 'server', {value: mockServer, writable: true})
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (mcpCommand as any).registerMcpHandlers()
+
+      const resourcesReadHandler = mockHandlers.get('resources/read')
+      const result = await resourcesReadHandler({
+        params: {uri: 'binary://test'},
+      })
+
+      expect(result.contents[0]).to.have.property('blob')
+      expect(result.contents[0].blob).to.equal(binaryData.toString('base64'))
+      expect(result.contents[0]).to.not.have.property('text')
+    })
+
+    it('should generate resource URIs from templates', () => {
+      const template = {
+        name: 'API Template',
+        uriTemplate: 'api/{version}/users/{userId}',
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(mcpCommand as any).allResourceTemplates = [template]
+
+      const uri = mcpCommand.generateResourceUri('API Template', {
+        userId: '123',
+        version: 'v1',
+      })
+
+      expect(uri).to.equal('api/v1/users/123')
+    })
+
+    it('should return null for non-existent template', () => {
+      const uri = mcpCommand.generateResourceUri('Non Existent', {param: 'value'})
+      expect(uri).to.be.null
     })
   })
 })

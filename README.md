@@ -163,6 +163,130 @@ export default class SensitiveCommand extends Command {
 - ⚠️ **Avoid exposing commands** that modify system-level configurations
 - ⚠️ **Be cautious with file operations** that could affect sensitive data
 
+## ⚖️ AI Provider Tool Limits
+
+Different AI providers have varying limits on the number of tools they can handle effectively:
+
+| Provider           | Tool Limit | Notes                                 |
+| ------------------ | ---------- | ------------------------------------- |
+| **VS Code**        | 128 tools  | Hard limit enforced by the platform   |
+| **Cursor**         | 40 tools   | Hard limit enforced by the platform   |
+| **Claude Desktop** | unknown    | Varies by model and subscription tier |
+| **ChatGPT**        | unknown    | Varies by model and subscription tier |
+| **GitHub Copilot** | unknown    | Varies by model and subscription tier |
+
+### Command Filtering Configuration
+
+To manage large CLIs with many commands, you can configure filtering to stay within these limits:
+
+#### Basic Topic Filtering
+
+```json
+{
+  "oclif": {
+    "mcp": {
+      "toolLimits": {
+        "maxTools": 40,
+        "warnThreshold": 35
+      },
+      "topics": {
+        "include": ["auth", "deploy", "config"],
+        "exclude": ["debug", "internal", "experimental"]
+      }
+    }
+  }
+}
+```
+
+#### Advanced Pattern Filtering
+
+```json
+{
+  "oclif": {
+    "mcp": {
+      "toolLimits": {
+        "maxTools": 80,
+        "strategy": "prioritize"
+      },
+      "commands": {
+        "include": ["auth:*", "deploy:*", "config:get", "config:set", "status", "logs:*"],
+        "exclude": ["*:debug", "internal:*", "test:*", "*:experimental"],
+        "priority": ["auth:login", "deploy:production", "status", "logs:tail"]
+      }
+    }
+  }
+}
+```
+
+#### Environment-Based Configuration
+
+```json
+{
+  "oclif": {
+    "mcp": {
+      "profiles": {
+        "development": {
+          "maxTools": 128,
+          "topics": {
+            "include": ["*"]
+          }
+        },
+        "production": {
+          "maxTools": 40,
+          "topics": {
+            "include": ["auth", "deploy", "config", "status", "logs"],
+            "exclude": ["debug", "test", "internal"]
+          }
+        },
+        "minimal": {
+          "maxTools": 20,
+          "commands": {
+            "include": ["auth:login", "auth:logout", "deploy:production", "status", "logs:tail"]
+          }
+        }
+      },
+      "defaultProfile": "production"
+    }
+  }
+}
+```
+
+#### Runtime Configuration
+
+You can also configure filtering at runtime:
+
+```bash
+# Use a specific profile
+your-cli mcp --profile minimal
+
+# Override max tools
+your-cli mcp --max-tools 50
+
+# Include specific topics only
+your-cli mcp --include-topics auth,deploy,config
+
+# Exclude specific patterns
+your-cli mcp --exclude-patterns "*:debug,test:*,internal:*"
+```
+
+#### Filtering Strategies
+
+- **`first`** - Include first N commands up to the limit
+- **`prioritize`** - Include priority commands first, then others up to limit
+- **`balanced`** - Try to include commands from all topics proportionally
+- **`strict`** - Fail if filtered commands exceed limit
+
+#### Auto-suggestions
+
+When commands are filtered out due to limits, the plugin will log suggestions:
+
+```
+⚠️  Filtered out 45 commands due to tool limit (40)
+💡 Consider using topic filtering: --include-topics auth,deploy
+💡 Or increase limit for your AI provider: --max-tools 80
+🔍 See filtered commands: your-cli mcp --show-filtered
+```
+
 ## 📚 Advanced Usage
 
 ### Custom Tool IDs
@@ -560,8 +684,6 @@ export default class NotificationCommand extends Command {
 // - notifications/resources/updated (for specific resource changes)
 // - notifications/resources/list_changed (when resource list changes)
 ```
-
-### 🎯 MCP-Compliant Prompts
 
 Prompts provide reusable templates that help AI assistants interact with your CLI more effectively. They follow the [official MCP specification](https://modelcontextprotocol.io/docs/concepts/prompts) using `prompts/list` and `prompts/get` endpoints.
 
