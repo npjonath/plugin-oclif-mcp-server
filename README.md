@@ -1,18 +1,26 @@
 # 🔌 oclif-plugin-mcp-server
 
-> Transform any oclif CLI into a **fully MCP-compliant** server for seamless AI assistant integration
+> Transform any oclif CLI into a **fully MCP 2025-06-18 compliant** server for seamless AI assistant integration
 
 [![oclif](https://img.shields.io/badge/cli-oclif-brightgreen.svg)](https://oclif.io)
-[![MCP Compliant](https://img.shields.io/badge/MCP-Compliant-blue.svg)](https://modelcontextprotocol.io)
+[![MCP 2025-06-18](https://img.shields.io/badge/MCP-2025--06--18-blue.svg)](https://modelcontextprotocol.io)
 [![Version](https://img.shields.io/npm/v/oclif-plugin-mcp-server.svg)](https://npmjs.org/package/oclif-plugin-mcp-server)
 [![Downloads/week](https://img.shields.io/npm/dw/oclif-plugin-mcp-server.svg)](https://npmjs.org/package/oclif-plugin-mcp-server)
 [![License](https://img.shields.io/npm/l/oclif-plugin-mcp-server.svg)](https://github.com/npjonath/oclif-plugin-mcp-server/blob/main/LICENSE)
 
-This plugin automatically converts your oclif CLI commands into a **fully MCP-compliant server**, implementing the [official Model Context Protocol specification](https://modelcontextprotocol.io/docs/concepts/resources). It allows AI assistants like Claude, ChatGPT, and Cursor to discover and execute your CLI tools naturally through conversation.
+This plugin automatically converts your oclif CLI commands into a **fully MCP 2025-06-18 protocol compliant server**, implementing the latest [Model Context Protocol specification](https://modelcontextprotocol.io/specification/2025-06-18). It allows AI assistants like Claude, ChatGPT, and Cursor to discover and execute your CLI tools naturally through conversation.
 
-## ✨ What's New
+## ✨ What's New in MCP 2025-06-18
 
-🎉 **MCP-Compliant**: Enhanced implementation with comprehensive MCP specification compliance:
+🎉 **Latest MCP Specification**: Full compliance with MCP 2025-06-18 including:
+
+- 🔒 **OAuth 2.1 Authorization**: Complete OAuth 2.1 support with PKCE for secure HTTP transport
+- 🔄 **Sampling Capability**: Server-side LLM interaction requests for advanced AI workflows
+- ❓ **Elicitation Support**: Request additional user input and confirmations from clients
+- 📝 **Structured Logging**: Advanced logging capability with level management and notifications
+- ⏳ **Progress Tracking**: Enhanced progress tracking with cancellation support
+- 🌐 **Protocol Version Headers**: Full `MCP-Protocol-Version: 2025-06-18` header support
+- 🛡️ **Enhanced Security**: Resource Indicators (RFC 8707) and improved authorization flows
 
 ## What is MCP?
 
@@ -26,6 +34,8 @@ The **Model Context Protocol (MCP)** is an open standard that enables AI assista
 
 ## 🚀 Features
 
+### Core MCP 2025-06-18 Capabilities
+
 - **🔍 Auto-discovery**: Automatically discovers and exposes oclif commands as MCP tools
 - **📝 Schema Generation**: Converts oclif arguments and flags to Zod schemas for type-safe execution
 - **📊 MCP-Compliant Resources**: Full support for static and dynamic resources following MCP specification
@@ -34,9 +44,20 @@ The **Model Context Protocol (MCP)** is an open standard that enables AI assista
 - **🔄 Lazy Loading**: Resources are fetched on-demand through proper MCP endpoints
 - **🛡️ Error Handling**: Graceful error handling with detailed feedback and proper JSON-RPC error codes
 - **⚙️ Zero Configuration**: Works out-of-the-box with any oclif CLI
-- **📋 Standards Compliant**: Implements the official MCP specification
+- **📋 Standards Compliant**: Implements the official MCP 2025-06-18 specification
 - **✅ Input Validation**: Type-safe argument validation for all commands and prompts
 - **🔔 Smart Notifications**: Debounced resource change notifications for optimal performance
+
+### New in MCP 2025-06-18
+
+- **🔒 OAuth 2.1 Security**: Full OAuth 2.1 authorization server integration with PKCE support
+- **🔄 Sampling Support**: Server-side capability for LLM interaction requests
+- **❓ Elicitation Framework**: Request user input and confirmations through the client
+- **📝 Structured Logging**: Advanced logging with level management and client notifications
+- **⏳ Progress Tracking**: Enhanced progress tokens with cancellation support
+- **🌐 Protocol Headers**: Proper `MCP-Protocol-Version: 2025-06-18` header handling
+- **🛡️ Enhanced Authorization**: Resource Indicators (RFC 8707) for secure token usage
+- **🔐 Session Management**: Advanced HTTP session handling with cleanup and monitoring
 
 ## 📦 Installation
 
@@ -189,44 +210,60 @@ your-cli mcp --transport http --port 3000 --host 127.0.0.1
 
 - **JSON-RPC over HTTP**: Client-to-server communication via POST requests
 - **Server-Sent Events (SSE)**: Server-to-client communication via GET requests
-- **Session Management**: Stateful sessions with `Mcp-Session-Id` headers
+- **Session Management**: Stateful sessions with `X-Session-Id` headers
+- **Protocol Headers**: `MCP-Protocol-Version: 2025-06-18` on all responses
+- **OAuth 2.1 Integration**: Secure authorization with PKCE support
 - **Resumability**: Event IDs and `Last-Event-ID` header support
-- **CORS Support**: Configurable cross-origin resource sharing
-- **Health Check**: `/health` endpoint for monitoring
+- **CORS Support**: Configurable cross-origin resource sharing with security controls
+- **Health Check**: `/health` endpoint for monitoring with protocol version
 
 #### HTTP Endpoints
 
-- `POST /mcp` - JSON-RPC requests (client-to-server)
-- `GET /mcp` - SSE streams (server-to-client)
-- `DELETE /mcp` - Session termination
-- `GET /health` - Health check
+- `POST /` - JSON-RPC requests (client-to-server)
+- `GET /events/:sessionId` - SSE streams (server-to-client)
+- `DELETE /sessions/:sessionId` - Session termination
+- `GET /health` - Health check with protocol version
+- `GET /oauth/authorize` - OAuth 2.1 authorization endpoint (if configured)
+- `GET /oauth/callback` - OAuth 2.1 callback endpoint (if configured)
 
 #### HTTP Transport Examples
 
 ```bash
 # List available tools
-curl -X POST http://localhost:3000/mcp \
+curl -X POST http://localhost:3000/ \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 
 # Call a tool
-curl -X POST http://localhost:3000/mcp \
+curl -X POST http://localhost:3000/ \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"your-command","arguments":{"arg":"value"}},"id":2}'
 
-# Subscribe to SSE stream
-curl -N http://localhost:3000/mcp \
-  -H "Accept: text/event-stream" \
-  -H "Mcp-Session-Id: your-session-id"
+# Subscribe to SSE stream for session updates
+curl -N http://localhost:3000/events/your-session-id \
+  -H "Accept: text/event-stream"
+
+# Health check with protocol version
+curl http://localhost:3000/health
+# Response: {"status":"ok"} with MCP-Protocol-Version: 2025-06-18 header
+
+# OAuth authorization flow (if configured)
+curl http://localhost:3000/oauth/authorize?session_id=your-session
 ```
 
 #### Web Client Integration
 
 ```javascript
-// Initialize HTTP MCP client
+// Initialize HTTP MCP client with 2025-06-18 support
 const client = new MCPClient({
   transport: 'http',
-  endpoint: 'http://localhost:3000/mcp',
+  endpoint: 'http://localhost:3000/',
+  protocolVersion: '2025-06-18',
+  // Optional OAuth configuration
+  oauth: {
+    authorizationUrl: 'http://localhost:3000/oauth/authorize',
+    callbackUrl: 'http://localhost:3000/oauth/callback',
+  },
 })
 
 await client.connect()
@@ -249,12 +286,21 @@ const tools = await client.listTools()
 
 ## 🔒 Security Considerations
 
-This plugin exposes your CLI commands to AI assistants through the MCP protocol. Consider these security aspects:
+This plugin exposes your CLI commands to AI assistants through the MCP protocol. The latest 2025-06-18 specification includes enhanced security features:
+
+### Enhanced Security in MCP 2025-06-18
+
+- **🔒 OAuth 2.1 Authorization**: Complete OAuth 2.1 implementation with PKCE support
+- **🛡️ Resource Indicators**: RFC 8707 compliance for secure resource access
+- **🔐 Session Management**: Advanced HTTP session handling with automatic cleanup
+- **🌐 CORS Protection**: Enhanced cross-origin controls with origin validation
+- **📋 Protocol Headers**: Proper version negotiation and security headers
 
 ### Trust Boundaries
 
 - **Local Development**: When running locally, the plugin operates in your user context with your permissions
 - **Production Use**: Only expose commands that are safe for AI assistants to execute
+- **HTTP Transport**: Use OAuth 2.1 for secure remote access with proper authorization flows
 - **Sensitive Operations**: Use the `disableMCP` flag for commands that perform sensitive operations
 
 ### Command Safety
@@ -270,14 +316,31 @@ export default class SensitiveCommand extends Command {
 }
 ```
 
+### OAuth 2.1 Configuration
+
+```typescript
+// Configure OAuth for secure HTTP transport
+const oauthConfig = {
+  authorizationServer: 'https://your-auth-server.com',
+  clientId: 'your-client-id',
+  clientSecret: 'your-client-secret', // Optional for public clients
+  tokenEndpoint: 'https://your-auth-server.com/token',
+  scope: 'mcp:read mcp:write',
+}
+```
+
 ### Recommended Practices
 
 - ✅ **Review exposed commands** before deployment
+- ✅ **Use OAuth 2.1** for production HTTP deployments
+- ✅ **Implement Resource Indicators** for secure token scoping
 - ✅ **Use tool annotations** to clearly mark destructive operations
 - ✅ **Implement proper validation** in your command handlers
 - ✅ **Monitor MCP usage** in production environments
+- ✅ **Configure CORS properly** for web integrations
 - ⚠️ **Avoid exposing commands** that modify system-level configurations
 - ⚠️ **Be cautious with file operations** that could affect sensitive data
+- ⚠️ **Use HTTPS** for all production HTTP transport deployments
 
 ## ⚖️ AI Provider Tool Limits
 
@@ -1111,12 +1174,13 @@ graph TB
     style BB fill:#ffebee
 ```
 
-## 🔄 MCP Protocol Compliance
+## 🔄 MCP 2025-06-18 Protocol Compliance
 
-This plugin implements the full MCP specification with enhanced compliance features:
+This plugin implements the full MCP 2025-06-18 specification with enhanced compliance features:
 
 | MCP Feature                 | Status      | Implementation                                    |
 | --------------------------- | ----------- | ------------------------------------------------- |
+| **Protocol Version**        | ✅ Complete | MCP-Protocol-Version: 2025-06-18 headers          |
 | **Tools**                   | ✅ Complete | All oclif commands auto-discovered as tools       |
 | **Tool Annotations**        | ✅ Complete | Support for readOnlyHint, destructiveHint, etc.   |
 | **Resources**               | ✅ Complete | `resources/list` and `resources/read` endpoints   |
@@ -1139,6 +1203,13 @@ This plugin implements the full MCP specification with enhanced compliance featu
 | **Prompt Validation**       | ✅ Enhanced | Type-safe prompt argument parsing                 |
 | **Debounced Notifications** | ✅ Enhanced | Optimized resource change notifications           |
 | **Enhanced Prompts**        | ✅ Enhanced | Interactive assistant-style prompt responses      |
+| **Sampling Capability**     | ✅ New      | Server-side LLM interaction requests              |
+| **Elicitation Support**     | ✅ New      | User input and confirmation requests              |
+| **Structured Logging**      | ✅ New      | Advanced logging with level management            |
+| **Progress Tracking**       | ✅ New      | Enhanced progress tokens with cancellation        |
+| **OAuth 2.1 Authorization** | ✅ New      | Complete OAuth 2.1 with PKCE support              |
+| **Resource Indicators**     | ✅ New      | RFC 8707 compliance for secure token usage        |
+| **Session Management**      | ✅ New      | Advanced HTTP session handling and cleanup        |
 
 ## 📋 Examples
 
@@ -1202,10 +1273,11 @@ yarn build       # Build the plugin
 # Test with MCP Inspector
 npx @modelcontextprotocol/inspector your-cli mcp
 
-# Test resource discovery
-curl -X POST http://localhost:3000/mcp \
+# Test resource discovery with protocol version
+curl -X POST http://localhost:3000/ \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"resources/list"}'
+# Response includes MCP-Protocol-Version: 2025-06-18 header
 ```
 
 ## 📄 License
@@ -1223,4 +1295,4 @@ MIT © [Jonathan Jot](https://github.com/npjonath/oclif-plugin-mcp-server)
 
 ---
 
-**🌟 Now fully MCP-compliant and ready for the AI-powered CLI future!**
+**🌟 Now fully MCP 2025-06-18 compliant with enhanced security and advanced capabilities - ready for the AI-powered CLI future!**

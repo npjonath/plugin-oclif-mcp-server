@@ -2,7 +2,16 @@ import {Server} from '@modelcontextprotocol/sdk/server/index.js'
 import {StdioServerTransport} from '@modelcontextprotocol/sdk/server/stdio.js'
 import {Command, Config as OclifConfig} from '@oclif/core'
 
-import {PromptHandler, ResourceHandler, SubscriptionHandler, ToolHandler} from '../handlers/index.js'
+import {
+  ElicitationHandler,
+  LoggingHandler,
+  ProgressHandler,
+  PromptHandler,
+  ResourceHandler,
+  SamplingHandler,
+  SubscriptionHandler,
+  ToolHandler,
+} from '../handlers/index.js'
 import {McpConfig, TransportType} from '../types/index.js'
 import {
   CommandFilterService,
@@ -19,14 +28,18 @@ export class McpServerService {
   private cleanupInterval?: NodeJS.Timeout
   private commandFilterService!: CommandFilterService
   private configService!: ConfigService
+  private elicitationHandler!: ElicitationHandler
   private httpTransportService!: HttpTransportService
+  private loggingHandler!: LoggingHandler
   private mcpConfig!: McpConfig
   private notificationService!: NotificationService
+  private progressHandler!: ProgressHandler
   private promptHandler!: PromptHandler
   private promptService!: PromptService
   private reportingService!: ReportingService
   private resourceHandler!: ResourceHandler
   private resourceService!: ResourceService
+  private samplingHandler!: SamplingHandler
   private server!: Server
   private subscriptionHandler!: SubscriptionHandler
   private toolHandler!: ToolHandler
@@ -91,6 +104,7 @@ export class McpServerService {
       },
       {
         capabilities: {
+          logging: {},
           prompts: {},
           resources: {
             listChanged: true,
@@ -99,6 +113,7 @@ export class McpServerService {
           roots: {
             listChanged: true,
           },
+          sampling: {},
           tools: {},
         },
       },
@@ -114,8 +129,12 @@ export class McpServerService {
     this.httpTransportService = new HttpTransportService(this.server)
 
     // Initialize protocol handlers
+    this.elicitationHandler = new ElicitationHandler()
+    this.loggingHandler = new LoggingHandler()
+    this.progressHandler = new ProgressHandler()
     this.resourceHandler = new ResourceHandler(this.resourceService, this.notificationService)
     this.promptHandler = new PromptHandler(this.promptService)
+    this.samplingHandler = new SamplingHandler()
     this.toolHandler = new ToolHandler(this.toolService)
     this.subscriptionHandler = new SubscriptionHandler(this.resourceService)
   }
@@ -126,8 +145,12 @@ export class McpServerService {
   }
 
   public registerHandlers(): void {
+    this.elicitationHandler.registerHandlers(this.server)
+    this.loggingHandler.registerHandlers(this.server)
+    this.progressHandler.registerHandlers(this.server)
     this.resourceHandler.registerHandlers(this.server)
     this.promptHandler.registerHandlers(this.server)
+    this.samplingHandler.registerHandlers(this.server)
     this.toolHandler.registerHandlers(this.server)
     this.subscriptionHandler.registerHandlers(this.server)
   }

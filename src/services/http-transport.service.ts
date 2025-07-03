@@ -5,10 +5,12 @@ import {v4 as uuidv4} from 'uuid'
 
 import {DEFAULT_HOST, DEFAULT_PORT, SESSION_TIMEOUT} from '../constants/index.js'
 import {HttpSession, JSONRPCMessage, SseConnection} from '../types/index.js'
+import {OAuthService} from './oauth.service.js'
 
 export class HttpTransportService {
   private httpApp?: Express
   private httpSessions = new Map<string, HttpSession>()
+  private oauthService?: OAuthService
   private sseConnections = new Map<string, SseConnection>()
 
   constructor(private readonly server: Server) {}
@@ -67,7 +69,8 @@ export class HttpTransportService {
     this.httpApp.use(express.json({limit: '10mb'}))
 
     // Health check endpoint
-    this.httpApp.get('/health', (req, res) => {
+    this.httpApp.get('/health', (_req, res) => {
+      res.setHeader('MCP-Protocol-Version', '2025-06-18')
       res.json({status: 'ok'})
     })
 
@@ -84,6 +87,20 @@ export class HttpTransportService {
     // Session termination endpoint
     this.httpApp.delete('/sessions/:sessionId', (req, res) => {
       this.handleSessionTermination(req, res)
+    })
+
+    // OAuth endpoints (if OAuth is configured)
+    this.httpApp.get('/oauth/authorize', (req, res) => {
+      this.handleOAuthAuthorize(req, res)
+    })
+
+    this.httpApp.get('/oauth/callback', (req, res) => {
+      this.handleOAuthCallback(req, res)
+    })
+
+    // Add OAuth middleware for protected endpoints
+    this.httpApp.use('/', (req, res, next) => {
+      this.validateOAuthToken(req, res, next)
     })
 
     // Start server
@@ -127,7 +144,9 @@ export class HttpTransportService {
         this.sendSSEEvent(res, 'response', response, session.eventId)
       }
 
+      // Set MCP protocol headers
       res.setHeader('X-Session-Id', sessionId)
+      res.setHeader('MCP-Protocol-Version', '2025-06-18')
       res.json(response)
     } catch (error) {
       console.error('HTTP request error:', error)
@@ -138,6 +157,45 @@ export class HttpTransportService {
         },
         id: req.body?.id,
         jsonrpc: '2.0',
+      })
+    }
+  }
+
+  private handleOAuthAuthorize(req: Request, res: Response): void {
+    if (!this.oauthService) {
+      res.status(501).json({error: 'OAuth not configured'})
+      return
+    }
+
+    const sessionId = (req.query.session_id as string) || uuidv4()
+    const authUrl = this.oauthService.createAuthorizationUrl(sessionId)
+
+    res.redirect(authUrl)
+  }
+
+  private async handleOAuthCallback(req: Request, res: Response): Promise<void> {
+    if (!this.oauthService) {
+      res.status(501).json({error: 'OAuth not configured'})
+      return
+    }
+
+    try {
+      const {code, state} = req.query as {code: string; state: string}
+      const token = await this.oauthService.exchangeCodeForToken(state, code, state)
+
+      res.json({
+        // eslint-disable-next-line camelcase
+        access_token: token.access_token,
+        message: 'OAuth authorization successful',
+        // eslint-disable-next-line camelcase
+        session_id: state,
+        // eslint-disable-next-line camelcase
+        token_type: token.token_type,
+      })
+    } catch (error) {
+      res.status(400).json({
+        error: 'OAuth callback failed',
+        message: error instanceof Error ? error.message : 'Unknown error',
       })
     }
   }
@@ -275,5 +333,31 @@ export class HttpTransportService {
     return (
       request.method === 'resources/subscribe' || request.method === 'resources/unsubscribe' || Boolean(response.error)
     )
+  }
+
+  private validateOAuthToken(req: Request, res: Response, next: () => void): void {
+    // Skip OAuth validation for public endpoints
+    const publicPaths = ['/health', '/oauth/authorize', '/oauth/callback']
+    if (publicPaths.some((path) => req.path.startsWith(path))) {
+      next()
+      return
+    }
+
+    if (!this.oauthService) {
+      // If OAuth is not configured, allow all requests
+      next()
+      return
+    }
+
+    const authHeader = req.headers.authorization
+    if (!authHeader || !this.oauthService.validateToken(authHeader)) {
+      res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Valid OAuth token required',
+      })
+      return
+    }
+
+    next()
   }
 }
