@@ -7,7 +7,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.13.2",
     "@oclif/core": "^4",
-    "zod": "^3.25.67"
+    "zod": "^3.25.74"
   },
   "devDependencies": {
     "@commitlint/config-conventional": "^19",
