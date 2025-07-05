@@ -5,7 +5,7 @@
   "author": "Jonathan Jot",
   "bugs": "https://github.com/npjonath/oclif-plugin-mcp-server/issues",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.13.2",
+    "@modelcontextprotocol/sdk": "^1.15.0",
     "@oclif/core": "^4",
     "zod": "^3.25.67"
   },
