@@ -886,7 +886,7 @@ export default class Mcp extends Command {
   private async registerMcpHandlers(): Promise<void> {
     // Store all commands for tool discovery
     const allCommands: Command.Loadable[] = []
-    for (const cmdClass of this.config.commands as Command.Loadable[]) {
+    for (const cmdClass of this.filteredCommands) {
       if (cmdClass.hidden || cmdClass.disableMCP || cmdClass.id === 'mcp') continue
       allCommands.push(cmdClass)
     }
