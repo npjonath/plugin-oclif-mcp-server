@@ -1,3 +1,9 @@
+## [0.6.1](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.6.0...0.6.1) (2025-07-09)
+
+### Bug Fixes
+
+- register mcp handlers for filtered commands only ([a1473bb](https://github.com/npjonath/oclif-plugin-mcp-server/commit/a1473bb90254175f0346a71f77913c6bc9b549fc))
+
 # [0.6.0](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.5.1...0.6.0) (2025-07-01)
 
 ### Features
