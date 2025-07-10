@@ -79,7 +79,7 @@
     "prepack": "yarn build && oclif manifest && oclif readme",
     "prepare": "husky || true && yarn build && oclif manifest",
     "pretest": "yarn build && tsc -p test --noEmit",
-    "test": "mocha --forbid-only \"test/**/*.test.ts\"",
+    "test": "mocha --forbid-only \"test/**/*.test.ts\" --exit",
     "version": "oclif readme && git add README.md"
   },
   "lint-staged": {
