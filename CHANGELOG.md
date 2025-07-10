@@ -1,3 +1,12 @@
+# [0.7.0](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.6.1...0.7.0) (2025-07-10)
+
+### Features
+
+- add HTTP transport support to MCP server ([17ceca1](https://github.com/npjonath/oclif-plugin-mcp-server/commit/17ceca1197521a95315609f8bcefdb8b55ee64ad))
+- add timeout configuration and related commands to MCP ([758c127](https://github.com/npjonath/oclif-plugin-mcp-server/commit/758c12733c93a6991d94b301a11953f875d0a8df))
+- enhance example CLI with comprehensive MCP testing commands ([2b7a054](https://github.com/npjonath/oclif-plugin-mcp-server/commit/2b7a0547b4da025695ce367e91985ab7edf3c4c6))
+- iterate on http transport, refactoring and example CLI setup ([31d3864](https://github.com/npjonath/oclif-plugin-mcp-server/commit/31d38642313f37ee4d72ad5b29e1561f2a1c7baa))
+
 ## [0.6.1](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.6.0...0.6.1) (2025-07-09)
 
 ### Bug Fixes
