@@ -27,16 +27,16 @@ export default class TestStreaming extends Command {
     }),
     count: Flags.integer({
       char: 'c',
-      default: 50,
+      default: 20,
       description: 'Number of items to process/stream',
       max: 10_000,
       min: 1,
     }),
     delay: Flags.integer({
       char: 'd',
-      default: 100,
+      default: 10,
       description: 'Delay between items in milliseconds',
-      max: 5000,
+      max: 1000,
       min: 0,
     }),
     detailed: Flags.boolean({

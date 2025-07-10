@@ -26,6 +26,7 @@ export interface McpConfig {
   commands?: McpCommandFilter
   defaultProfile?: string
   profiles?: Record<string, McpProfile>
+  timeout?: number
   toolLimits?: McpToolLimits
   topics?: McpTopicFilter
 }

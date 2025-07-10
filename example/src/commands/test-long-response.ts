@@ -42,7 +42,7 @@ export default class TestLongResponse extends Command {
     })(),
     lines: Flags.integer({
       char: 'l',
-      default: 100,
+      default: 50,
       description: 'Number of lines to generate',
       max: 10_000,
       min: 10,
@@ -54,7 +54,7 @@ export default class TestLongResponse extends Command {
       min: 1,
     }),
     records: Flags.integer({
-      default: 1000,
+      default: 100,
       description: 'Number of records (for data dump)',
       max: 50_000,
       min: 10,

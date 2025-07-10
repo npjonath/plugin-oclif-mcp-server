@@ -48,6 +48,12 @@ export default class Mcp extends Command {
       helpValue: 'prioritize',
       options: ['first', 'prioritize', 'balanced', 'strict'],
     }),
+    timeout: Flags.integer({
+      default: 300,
+      description: 'Tool execution timeout in seconds (0 = no timeout)',
+      helpValue: '300',
+      min: 0,
+    }),
     transport: Flags.string({
       default: 'stdio',
       description: 'Transport protocol to use',

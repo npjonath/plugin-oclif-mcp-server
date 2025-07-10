@@ -120,6 +120,8 @@
     "version": "oclif readme && git add README.md",
     "mcp:start": "DEBUG=mcp:* ./bin/run.js mcp",
     "mcp:start:http": "DEBUG=mcp:* ./bin/run.js mcp --transport http --port 3000",
+    "mcp:start:http:short-timeout": "DEBUG=mcp:* ./bin/run.js mcp --transport http --port 3000 --timeout 10",
+    "mcp:start:http:no-timeout": "DEBUG=mcp:* ./bin/run.js mcp --transport http --port 3000 --timeout 0",
     "mcp:start:dev": "DEBUG=mcp:* ./bin/run.js mcp --profile development",
     "mcp:start:prod": "DEBUG=mcp:* ./bin/run.js mcp --profile production",
     "mcp:inspect": "npx @modelcontextprotocol/inspector ./bin/run.js mcp",
@@ -130,6 +132,8 @@
     "mcp:test:tools": "curl -X POST http://localhost:3000 -H \"Content-Type: application/json\" -d '{\"jsonrpc\":\"2.0\",\"method\":\"tools/list\",\"params\":{},\"id\":2}'",
     "mcp:test:resources": "curl -X POST http://localhost:3000 -H \"Content-Type: application/json\" -d '{\"jsonrpc\":\"2.0\",\"method\":\"resources/list\",\"params\":{},\"id\":3}'",
     "mcp:test:hello": "curl -X POST http://localhost:3000 -H \"Content-Type: application/json\" -d '{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"name\":\"hello\",\"arguments\":{}},\"id\":4}'",
+    "mcp:test:timeout": "./test-timeout.sh",
+    "mcp:test:streaming:quick": "./test-streaming-quick.sh",
     "plugin:rebuild": "cd .. && yarn build && cd example && yarn plugins unlink .. && yarn plugins link ..",
     "plugin:status": "./bin/run.js plugins",
     "debug:full": "DEBUG=*,-babel* ./bin/run.js mcp --show-filtered"

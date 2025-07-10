@@ -85,7 +85,26 @@ export class ToolService {
         }
 
         try {
-          await instance.run()
+          // Apply timeout if configured (0 means no timeout)
+          if (this.mcpConfig.timeout && this.mcpConfig.timeout > 0) {
+            const timeoutMs = this.mcpConfig.timeout * 1000
+            await Promise.race([
+              instance.run(),
+              new Promise((_, reject) => {
+                setTimeout(() => {
+                  reject(
+                    createMcpError(
+                      MCP_ERROR_CODES.REQUEST_TIMEOUT,
+                      `Tool execution timed out after ${this.mcpConfig.timeout} seconds`,
+                    ),
+                  )
+                }, timeoutMs)
+              }),
+            ])
+          } else {
+            await instance.run()
+          }
+
           output = stdout + (stderr ? `\nErrors:\n${stderr}` : '')
         } finally {
           // Restore original write functions

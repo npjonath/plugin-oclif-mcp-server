@@ -66,6 +66,10 @@ export class ConfigService {
       }
     }
 
+    if (flags.timeout !== undefined) {
+      config.timeout = flags.timeout as number
+    }
+
     return config
   }
 
