@@ -1,6 +1,6 @@
-# example
+# Example CLI for MCP Plugin Testing
 
-A new CLI generated with oclif
+A test CLI for the oclif-plugin-mcp-server, demonstrating how to integrate the MCP (Model Context Protocol) plugin into an oclif CLI.
 
 [![oclif](https://img.shields.io/badge/cli-oclif-brightgreen.svg)](https://oclif.io)
 [![Version](https://img.shields.io/npm/v/example.svg)](https://npmjs.org/package/example)
@@ -8,9 +8,203 @@ A new CLI generated with oclif
 
 <!-- toc -->
 
+- [MCP Plugin Testing](#mcp-plugin-testing)
+  - [Quick Start](#quick-start)
+  - [Development Scripts](#development-scripts)
+  - [Testing & Debugging](#testing--debugging)
+  - [HTTP Mode Testing](#http-mode-testing)
 - [Usage](#usage)
 - [Commands](#commands)
 <!-- tocstop -->
+
+# MCP Plugin Testing
+
+This example CLI is specifically designed to test the `oclif-plugin-mcp-server` plugin. It demonstrates how to integrate MCP capabilities into any oclif CLI.
+
+## Quick Start
+
+1. **Install dependencies:**
+
+   ```bash
+   yarn install
+   ```
+
+2. **Build the CLI:**
+
+   ```bash
+   yarn build
+   ```
+
+3. **Link the MCP plugin:** (already done in package.json)
+
+   ```bash
+   yarn plugins link ..
+   ```
+
+4. **Test the MCP server:**
+   ```bash
+   yarn mcp:inspect
+   ```
+
+## Development Scripts
+
+The following npm scripts are available for testing and debugging the MCP plugin:
+
+### MCP Server Scripts
+
+- `yarn mcp:start` - Start MCP server in stdio mode with debug logging
+- `yarn mcp:start:http` - Start MCP server in HTTP mode on port 3000
+- `yarn mcp:start:dev` - Start with development profile
+- `yarn mcp:start:prod` - Start with production profile
+
+### Debugging Scripts
+
+- `yarn mcp:inspect` - Open MCP inspector for interactive testing
+- `yarn mcp:inspect:http` - Open MCP inspector for HTTP mode
+- `yarn mcp:debug` - Start with full debug logging (MCP + oclif)
+- `yarn mcp:tools` - Show available tools and filtered commands
+- `yarn debug:full` - Start with maximum debug output
+
+### Plugin Management Scripts
+
+- `yarn plugin:rebuild` - Rebuild parent plugin and relink to this CLI
+- `yarn plugin:status` - Check plugin installation status
+
+## Testing & Debugging
+
+### 1. Interactive Testing with MCP Inspector
+
+The MCP Inspector provides a GUI for testing the MCP server:
+
+```bash
+yarn mcp:inspect
+```
+
+This will:
+
+- Start the MCP server in stdio mode
+- Open a web interface for testing
+- Allow you to inspect tools, resources, and execute commands
+
+### 2. HTTP Mode Testing
+
+For testing with HTTP transport:
+
+```bash
+# Terminal 1: Start HTTP server
+yarn mcp:start:http
+
+# Terminal 2: Test with curl scripts
+yarn mcp:test:init      # Initialize connection
+yarn mcp:test:tools     # List available tools
+yarn mcp:test:resources # List available resources
+yarn mcp:test:hello     # Execute hello command
+```
+
+### 3. Debug Logging
+
+Enable detailed logging to troubleshoot issues:
+
+```bash
+# MCP-specific debugging
+yarn mcp:debug
+
+# Full debug output (verbose)
+yarn debug:full
+```
+
+### 4. Plugin Development Workflow
+
+When making changes to the parent plugin:
+
+```bash
+# Rebuild and relink the plugin
+yarn plugin:rebuild
+
+# Test the changes
+yarn mcp:inspect
+```
+
+### 5. Manual Testing
+
+You can also test manually:
+
+```bash
+# Check available commands
+./bin/run.js --help
+
+# Test MCP command directly
+./bin/run.js mcp --help
+./bin/run.js mcp --show-filtered
+
+# Test with different profiles
+./bin/run.js mcp --profile development
+./bin/run.js mcp --profile production
+```
+
+## HTTP Mode Testing
+
+When testing in HTTP mode, the server runs on `http://localhost:3000`. You can test using:
+
+### Curl Commands (via npm scripts)
+
+```bash
+yarn mcp:test:init      # Test initialization
+yarn mcp:test:tools     # List tools
+yarn mcp:test:resources # List resources
+yarn mcp:test:hello     # Execute hello command
+```
+
+### Manual Curl Commands
+
+```bash
+# Initialize
+curl -X POST http://localhost:3000 \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"0.1.0","capabilities":{}},"id":1}'
+
+# List tools
+curl -X POST http://localhost:3000 \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","params":{},"id":2}'
+
+# Execute hello command
+curl -X POST http://localhost:3000 \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"hello","arguments":{"person":"World","from":"MCP"}},"id":3}'
+```
+
+### Configuration
+
+The MCP configuration is in `package.json` under `oclif.mcp`:
+
+```json
+{
+  "oclif": {
+    "mcp": {
+      "resources": {
+        "static": [
+          {
+            "uri": "file://example/README.md",
+            "name": "Example CLI Documentation",
+            "description": "Documentation for the example CLI"
+          }
+        ]
+      },
+      "prompts": [
+        {
+          "name": "example-help",
+          "description": "Get help with example CLI commands"
+        }
+      ],
+      "profiles": {
+        "development": {"enabled": true, "debug": true},
+        "production": {"enabled": true, "debug": false}
+      }
+    }
+  }
+}
+```
 
 # Usage
 

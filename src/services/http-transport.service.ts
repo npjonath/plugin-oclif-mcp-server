@@ -119,10 +119,10 @@ export class HttpTransportService {
   }
 
   private async handleHttpRequest(req: Request, res: Response): Promise<void> {
-    try {
-      // Use MCP-compliant session header or create new session
-      const sessionId = (req.headers['mcp-session-id'] as string) || uuidv4()
+    // Use MCP-compliant session header or create new session
+    const sessionId = (req.headers['mcp-session-id'] as string) || uuidv4()
 
+    try {
       // Get or create session
       let session = this.httpSessions.get(sessionId)
       if (!session) {
@@ -139,13 +139,6 @@ export class HttpTransportService {
       session.lastActivity = new Date()
 
       const request = req.body as JSONRPCMessage
-
-      // Special handling for initialization to assign session ID
-      if (request.method === 'initialize') {
-        // Ensure session ID is set for initialization response
-        res.setHeader('Mcp-Session-Id', sessionId)
-      }
-
       const response = await this.processJsonRpcRequest(request)
 
       // Log the event
@@ -162,25 +155,28 @@ export class HttpTransportService {
       }
 
       // Set MCP protocol headers (always include session ID for clients to track)
-      res.setHeader('Mcp-Session-Id', sessionId)
-      res.setHeader('MCP-Protocol-Version', '2025-06-18')
-      res.json(response)
+      if (!res.headersSent) {
+        res.setHeader('Mcp-Session-Id', sessionId)
+        res.setHeader('MCP-Protocol-Version', '2025-06-18')
+        res.json(response)
+      }
     } catch (error) {
       console.error('HTTP request error:', error)
 
-      // Ensure session ID is included in error responses too
-      const sessionId = (req.headers['mcp-session-id'] as string) || uuidv4()
-      res.setHeader('Mcp-Session-Id', sessionId)
-      res.setHeader('MCP-Protocol-Version', '2025-06-18')
+      // Only set headers if response hasn't been sent yet
+      if (!res.headersSent) {
+        res.setHeader('Mcp-Session-Id', sessionId)
+        res.setHeader('MCP-Protocol-Version', '2025-06-18')
 
-      res.status(500).json({
-        error: {
-          code: -32_603,
-          message: 'Internal error',
-        },
-        id: req.body?.id,
-        jsonrpc: '2.0',
-      })
+        res.status(500).json({
+          error: {
+            code: -32_603,
+            message: 'Internal error',
+          },
+          id: req.body?.id,
+          jsonrpc: '2.0',
+        })
+      }
     }
   }
 
