@@ -1,5 +1,6 @@
 import {Command, Config as OclifConfig} from '@oclif/core'
-import {z, ZodSchema, ZodType} from 'zod'
+import {z, ZodType} from 'zod'
+import {zodToJsonSchema} from 'zod-to-json-schema'
 
 import {MCP_ERROR_CODES} from '../constants/index.js'
 import {CommandInput, McpConfig, McpToolAnnotations} from '../types/index.js'
@@ -115,16 +116,42 @@ export class ToolService {
   }
 
   public async handleListTools(): Promise<{
-    tools: Array<{annotations?: McpToolAnnotations; description?: string; inputSchema: ZodSchema; name: string}>
+    tools: Array<{annotations?: McpToolAnnotations; description?: string; inputSchema: object; name: string}>
   }> {
     const tools = []
 
     for (const cmd of this.filteredCommands) {
       if (cmd.hidden || cmd.disableMCP || cmd.id === 'mcp') continue
 
-      const inputSchema = this.buildInputSchema(cmd)
+      const zodInputSchema = this.buildInputSchema(cmd)
+      const zodSchema = z.object(zodInputSchema)
+
+      // Convert Zod schema to JSON Schema for MCP compliance
+      const jsonSchema = zodToJsonSchema(zodSchema, {
+        target: 'jsonSchema7',
+      })
+
+      // Ensure we have a direct object schema with type: "object"
+      let inputSchema: object
+
+      // Check if it's a reference schema
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const schema = jsonSchema as any
+      if (schema.$ref && schema.definitions) {
+        // Extract the actual schema from definitions
+        const refKey = schema.$ref.replace('#/definitions/', '')
+        inputSchema = schema.definitions[refKey] || schema
+      } else {
+        inputSchema = schema
+      }
+
+      // Ensure the schema has type: "object" at the root level
+      if (typeof inputSchema === 'object' && inputSchema !== null && !('type' in inputSchema)) {
+        inputSchema = {type: 'object', ...inputSchema}
+      }
+
       const tool = {
-        inputSchema: z.object(inputSchema),
+        inputSchema,
         name: cmd.id,
         ...(cmd.summary && {description: cmd.summary}),
         ...(cmd.description && !cmd.summary && {description: cmd.description}),

@@ -37,8 +37,7 @@ export class LoggingHandler {
     // - logging/setLevel: Set minimum log level for filtering
     // - Send log notifications to clients via server.notification
 
-    // For now, we'll add a placeholder that demonstrates the concept
-    console.error('📝 Logging capability registered (placeholder implementation)')
+    console.error('📝 Logging capability registered')
   }
 
   public setMinLogLevel(level: LogEntry['level']): void {

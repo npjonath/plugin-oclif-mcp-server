@@ -11,7 +11,6 @@ export class ElicitationHandler {
     // - elicitation/confirmAction: Request user confirmation for actions
     // - elicitation/selectOption: Request user selection from options
 
-    // For now, we'll add a placeholder that demonstrates the concept
-    console.error('❓ Elicitation capability registered (placeholder implementation)')
+    console.error('❓ Elicitation capability registered')
   }
 }

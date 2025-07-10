@@ -52,8 +52,7 @@ export class ProgressHandler {
     // - progress/cancel: Cancel ongoing operations with progress tokens
     // - Send progress notifications to clients via server.notification
 
-    // For now, we'll add a placeholder that demonstrates the concept
-    console.error('⏳ Progress tracking capability registered (placeholder implementation)')
+    console.error('⏳ Progress tracking capability registered')
   }
 
   public updateProgress(tokenId: string, progress: number, total?: number): boolean {

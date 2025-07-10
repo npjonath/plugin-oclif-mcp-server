@@ -1,6 +1,7 @@
 import {Server} from '@modelcontextprotocol/sdk/server/index.js'
 import {
   ListResourcesRequestSchema,
+  ListResourceTemplatesRequestSchema,
   ReadResourceRequestSchema,
   SubscribeRequestSchema,
   UnsubscribeRequestSchema,
@@ -44,6 +45,20 @@ export class ResourceHandler {
             uri: root.uri,
           })),
         }),
+      }
+    })
+
+    // Register resources/templates/list handler
+    server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => {
+      const resourceTemplates = this.resourceService.getResourceTemplates()
+
+      return {
+        resourceTemplates: resourceTemplates.map((template) => ({
+          description: template.description,
+          mimeType: template.mimeType,
+          name: template.name,
+          uriTemplate: template.uriTemplate,
+        })),
       }
     })
 

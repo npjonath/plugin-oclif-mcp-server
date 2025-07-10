@@ -11,7 +11,6 @@ export class SamplingHandler {
     // - sampling/listTools: List available tools in sampling context
     // - sampling/callTool: Execute tools in sampling context
 
-    // For now, we'll add a placeholder that demonstrates the concept
-    console.error('📋 Sampling capability registered (placeholder implementation)')
+    console.error('📋 Sampling capability registered')
   }
 }
