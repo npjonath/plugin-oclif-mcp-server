@@ -1,0 +1,142 @@
+{
+  "name": "example",
+  "description": "A new CLI generated with oclif",
+  "version": "0.0.0",
+  "author": "NPjonath",
+  "bin": {
+    "example": "./bin/run.js"
+  },
+  "bugs": "https://github.com/plugin-mcp-server/example/issues",
+  "dependencies": {
+    "@oclif/core": "^4",
+    "@oclif/plugin-help": "^6",
+    "@oclif/plugin-plugins": "^5"
+  },
+  "devDependencies": {
+    "@eslint/compat": "^1",
+    "@oclif/prettier-config": "^0.2.1",
+    "@oclif/test": "^4",
+    "@types/chai": "^4",
+    "@types/mocha": "^10",
+    "@types/node": "^18",
+    "chai": "^4",
+    "eslint": "^9",
+    "eslint-config-oclif": "^6",
+    "eslint-config-prettier": "^10",
+    "mocha": "^10",
+    "oclif": "^4",
+    "shx": "^0.3.3",
+    "ts-node": "^10",
+    "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "./bin",
+    "./dist",
+    "./oclif.manifest.json"
+  ],
+  "homepage": "https://github.com/plugin-mcp-server/example",
+  "keywords": [
+    "oclif"
+  ],
+  "license": "MIT",
+  "main": "dist/index.js",
+  "type": "module",
+  "oclif": {
+    "bin": "example",
+    "dirname": "example",
+    "commands": "./dist/commands",
+    "plugins": [
+      "@oclif/plugin-help",
+      "@oclif/plugin-plugins",
+      "file:.."
+    ],
+    "topicSeparator": " ",
+    "topics": {
+      "hello": {
+        "description": "Say hello to the world and others"
+      },
+      "test-flags": {
+        "description": "Test flag handling and validation"
+      },
+      "test-args": {
+        "description": "Test argument handling and validation"
+      },
+      "test-operations": {
+        "description": "Test different operation types (readonly, destructive, idempotent)"
+      },
+      "test-validation": {
+        "description": "Test input validation and error handling"
+      },
+      "test-schema": {
+        "description": "Test complex schema generation and handling"
+      }
+    },
+    "mcp": {
+      "resources": {
+        "static": [
+          {
+            "uri": "file://example/README.md",
+            "name": "Example CLI Documentation",
+            "description": "Documentation for the example CLI"
+          }
+        ]
+      },
+      "prompts": [
+        {
+          "name": "example-help",
+          "description": "Get help with example CLI commands",
+          "arguments": [
+            {
+              "name": "command",
+              "description": "The command to get help for",
+              "required": false
+            }
+          ]
+        }
+      ],
+      "profiles": {
+        "development": {
+          "enabled": true,
+          "debug": true
+        },
+        "production": {
+          "enabled": true,
+          "debug": false
+        }
+      }
+    }
+  },
+  "repository": "plugin-mcp-server/example",
+  "scripts": {
+    "build": "shx rm -rf dist && tsc -b",
+    "lint": "eslint",
+    "postpack": "shx rm -f oclif.manifest.json",
+    "posttest": "yarn lint",
+    "prepack": "oclif manifest && oclif readme",
+    "test": "mocha --forbid-only \"test/**/*.test.ts\"",
+    "version": "oclif readme && git add README.md",
+    "mcp:start": "DEBUG=mcp:* ./bin/run.js mcp",
+    "mcp:start:http": "DEBUG=mcp:* ./bin/run.js mcp --transport http --port 3000",
+    "mcp:start:http:short-timeout": "DEBUG=mcp:* ./bin/run.js mcp --transport http --port 3000 --timeout 10",
+    "mcp:start:http:no-timeout": "DEBUG=mcp:* ./bin/run.js mcp --transport http --port 3000 --timeout 0",
+    "mcp:start:dev": "DEBUG=mcp:* ./bin/run.js mcp --profile development",
+    "mcp:start:prod": "DEBUG=mcp:* ./bin/run.js mcp --profile production",
+    "mcp:inspect": "npx @modelcontextprotocol/inspector ./bin/run.js mcp",
+    "mcp:inspect:http": "npx @modelcontextprotocol/inspector ./bin/run.js mcp --transport http --port 3000",
+    "mcp:debug": "DEBUG=mcp:*,oclif:* ./bin/run.js mcp --show-filtered",
+    "mcp:tools": "DEBUG=mcp:* ./bin/run.js mcp --show-filtered",
+    "mcp:test:init": "curl -X POST http://localhost:3000 -H \"Content-Type: application/json\" -d '{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"0.1.0\",\"capabilities\":{}},\"id\":1}'",
+    "mcp:test:tools": "curl -X POST http://localhost:3000 -H \"Content-Type: application/json\" -d '{\"jsonrpc\":\"2.0\",\"method\":\"tools/list\",\"params\":{},\"id\":2}'",
+    "mcp:test:resources": "curl -X POST http://localhost:3000 -H \"Content-Type: application/json\" -d '{\"jsonrpc\":\"2.0\",\"method\":\"resources/list\",\"params\":{},\"id\":3}'",
+    "mcp:test:hello": "curl -X POST http://localhost:3000 -H \"Content-Type: application/json\" -d '{\"jsonrpc\":\"2.0\",\"method\":\"tools/call\",\"params\":{\"name\":\"hello\",\"arguments\":{}},\"id\":4}'",
+    "mcp:test:timeout": "./test-timeout.sh",
+    "mcp:test:streaming:quick": "./test-streaming-quick.sh",
+    "plugin:rebuild": "cd .. && yarn build && cd example && yarn plugins unlink .. && yarn plugins link ..",
+    "plugin:status": "./bin/run.js plugins",
+    "debug:full": "DEBUG=*,-babel* ./bin/run.js mcp --show-filtered"
+  },
+  "types": "dist/index.d.ts"
+}
