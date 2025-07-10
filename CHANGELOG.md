@@ -1,3 +1,9 @@
+## [0.7.1](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.7.0...0.7.1) (2025-07-10)
+
+### Bug Fixes
+
+- unit tests ([0f2a087](https://github.com/npjonath/oclif-plugin-mcp-server/commit/0f2a087376cbbd0d6716429863c86edaea5ed0dc))
+
 # [0.7.0](https://github.com/npjonath/oclif-plugin-mcp-server/compare/0.6.1...0.7.0) (2025-07-10)
 
 ### Features
